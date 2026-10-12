@@ -6,6 +6,9 @@
 /artifact/
 /sdkconfig
 /sdkconfig.**
+!/sdkconfig.*.defaults
+/build-s3/
+/build-s3-mock/
 backups/
 # dist/
 .vscode/

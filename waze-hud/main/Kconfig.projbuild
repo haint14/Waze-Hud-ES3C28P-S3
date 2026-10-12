@@ -8,6 +8,29 @@ config WAZE_HUD_DISPLAY_CYD_28
         It uses the ILI9341 SPI pin map, software landscape rotation and
         320x240 output.
 
+config WAZE_HUD_BOARD_ES3C28P
+    bool "Board: LCDWiki ES3C28P/ES3N28P (ESP32-S3, 2.8-inch ILI9341)"
+    default n
+    help
+        Selects the ESP32-S3 pin map for the ES3C28P/ES3N28P board. The
+        display is the same ILI9341 240x320 SPI panel as the CYD, so the
+        320x240 landscape layout and software rotation are reused.
+        Leave disabled for the classic ESP32-2432S028 CYD.
+
+config WAZE_HUD_LCD_INVERT_COLOR
+    bool "Enable LCD color inversion (INVON)"
+    default y if WAZE_HUD_BOARD_ES3C28P
+    default n
+    help
+        IPS ILI9341 panels usually need INVON for black to render as black.
+        Disable if the screen shows inverted colors.
+
+config WAZE_HUD_LCD_RGB_ORDER_BGR
+    bool "LCD element order is BGR"
+    default y
+    help
+        Disable if red and blue appear swapped.
+
 config WAZE_HUD_MOCK_MODE
     bool "Enable renderer mock mode"
     default n

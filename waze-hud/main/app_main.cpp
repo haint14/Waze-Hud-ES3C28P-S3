@@ -32,7 +32,8 @@ constexpr gpio_num_t kOrientationButton = GPIO_NUM_14;
 constexpr TickType_t kLongPressTicks = pdMS_TO_TICKS(1200);
 constexpr TickType_t kDoublePressTicks = pdMS_TO_TICKS(350);
 
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
+// ES3C28P has a single-wire WS2812 on IO42 instead of discrete RGB pins.
+#if CONFIG_WAZE_HUD_DISPLAY_CYD_28 && !CONFIG_WAZE_HUD_BOARD_ES3C28P
 constexpr gpio_num_t kLedRed = GPIO_NUM_4;
 constexpr gpio_num_t kLedGreen = GPIO_NUM_16;
 constexpr gpio_num_t kLedBlue = GPIO_NUM_17;
@@ -356,7 +357,7 @@ extern "C" void app_main() {
 #endif
 
     ESP_ERROR_CHECK(startOrientationButton());
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
+#if CONFIG_WAZE_HUD_DISPLAY_CYD_28 && !CONFIG_WAZE_HUD_BOARD_ES3C28P
     ESP_ERROR_CHECK(startOverspeedLed());
 #endif
     ESP_ERROR_CHECK(xTaskCreate(systemStatusTask, "hud_status", 3072, nullptr, 3, nullptr) == pdPASS

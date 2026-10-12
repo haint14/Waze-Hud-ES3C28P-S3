@@ -39,13 +39,28 @@ static_assert(layout::PhysicalWidth == kNativeHeight &&
               layout::PhysicalHeight == kNativeWidth,
               "ES3C35P landscape surface must match the rotated native panel");
 #elif CONFIG_WAZE_HUD_DISPLAY_CYD_28
+#if CONFIG_WAZE_HUD_BOARD_ES3C28P
+// LCDWiki ES3C28P/ES3N28P: LCD reset is tied to the ESP32-S3 EN pin.
+constexpr gpio_num_t kBacklight = GPIO_NUM_45;
+constexpr gpio_num_t kCs = GPIO_NUM_10;
+constexpr gpio_num_t kDc = GPIO_NUM_46;
+constexpr gpio_num_t kClock = GPIO_NUM_12;
+constexpr gpio_num_t kMosi = GPIO_NUM_11;
+constexpr gpio_num_t kMiso = GPIO_NUM_13;
+#else
 constexpr gpio_num_t kBacklight = GPIO_NUM_21;
 constexpr gpio_num_t kCs = GPIO_NUM_15;
 constexpr gpio_num_t kDc = GPIO_NUM_2;
 constexpr gpio_num_t kClock = GPIO_NUM_14;
 constexpr gpio_num_t kMosi = GPIO_NUM_13;
 constexpr gpio_num_t kMiso = GPIO_NUM_12;
+#endif
 constexpr spi_host_device_t kLcdHost = SPI2_HOST;
+#ifdef CONFIG_WAZE_HUD_LCD_INVERT_COLOR
+constexpr bool kInvertColor = true;
+#else
+constexpr bool kInvertColor = false;
+#endif
 constexpr int kNativeWidth = 240;
 constexpr int kNativeHeight = 320;
 static_assert(layout::PhysicalWidth == kNativeHeight &&
@@ -311,7 +326,11 @@ esp_err_t DisplayDriver::init() {
     esp_lcd_panel_dev_config_t panelConfig{};
     // TFT reset is tied to the ESP32 EN signal on the resistive CYD revision.
     panelConfig.reset_gpio_num = -1;
+#ifdef CONFIG_WAZE_HUD_LCD_RGB_ORDER_BGR
     panelConfig.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR;
+#else
+    panelConfig.rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB;
+#endif
     panelConfig.bits_per_pixel = 16;
     panelConfig.vendor_config = &vendorConfig;
     esp_lcd_panel_handle_t panel = nullptr;
@@ -321,8 +340,8 @@ esp_err_t DisplayDriver::init() {
     ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(panel), kTag, "ILI9341 software reset failed");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(panel), kTag, "ILI9341 initialization failed");
     // Standard ILI9341 panels on CYD 2.8 use normal source polarity: RGB565 0x0000
-    // is black with inversion off (INVOFF). INVON inverts black to white and red to cyan.
-    ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(panel, false), kTag,
+    // is black with inversion off (INVOFF). IPS variants (ES3C28P) need INVON.
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(panel, kInvertColor), kTag,
                         "ILI9341 inversion setup failed");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(panel, true), kTag,
                         "ILI9341 display enable failed");
