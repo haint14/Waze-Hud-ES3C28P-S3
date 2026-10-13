@@ -36,6 +36,10 @@ Dự án WazeHUD tối ưu cho màn hình ESP32-2432S028 (CYD 2.8 inch). Toàn b
 - Bật cờ `CONFIG_SPIRAM_IGNORE_NOTFOUND=y` chống crash `abort()` khi khởi động trên board dùng Quad PSRAM hoặc không có PSRAM.
 - Cung cấp cơ chế fallback an toàn cho bộ đệm vẽ DMA, chống tràn RAM DMA khi NimBLE chạy đồng thời.
 
+### 🔌 Khắc phục Triệt để Lỗi Phân làn & Cài đặt App trên bản USB Serial (`CYD2.8-Serial`)
+- **Bổ sung bản tin HLP `dev` opt-in phân làn:** Khắc phục lỗi Waze Mod không gửi dữ liệu làn đường (`lan`) và chỉ gửi 1 cảnh báo (`alr`) do thiếu bản tin khai báo thiết bị `dev` trên kết nối Serial. Bổ sung cơ chế phát `dev` an toàn khi khởi động và theo phiên `sess` mới, chặn đứng nguy cơ lặp vô tận `dev` ↔ `hi`.
+- **Nâng bộ đệm TX UART lên 2048 byte:** Đảm bảo nạp và phát trọn bộ 11 gói schema cài đặt HLP Device Config (~1.2 KB) tức thì, loại bỏ hoàn toàn hiện tượng nghẽn luồng CPU khi Waze Mod kết nối hoặc mở giao diện cài đặt trên App.
+
 ---
 
 ## [Build 14 (v2.8.14-b14)] - 2026-10-08
