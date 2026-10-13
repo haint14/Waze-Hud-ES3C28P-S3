@@ -4,6 +4,46 @@ Dự án WazeHUD tối ưu cho màn hình ESP32-2432S028 (CYD 2.8 inch). Toàn b
 
 ---
 
+## [Build 15 (v2.8.15-b15)] - 2026-10-13
+
+> Bản phát hành B15 tối ưu hóa toàn bộ hệ sinh thái firmware về **3 file BIN tinh gọn**, nâng cấp chuẩn cấu hình **HLP Device Config Schema Rev 7** (bổ sung Cố định độ sáng và Đảo ngược màu màn hình tích hợp 2USB & 1USB), thang màu số mét biển báo 4 cấp độ, giảm độ sáng đêm về 20%, tên đường kế tiếp trượt dưới biển báo tốc độ và sửa triệt để lỗi bootloop trên bản 3.5".
+
+### 📦 Tinh gọn & Thống nhất còn đúng 3 Firmware Factory duy nhất (Offset 0x0)
+- **`CYD2.8-BLE-131026-b15.bin`**: Bản Bluetooth BLE cho màn 2.8" (Tích hợp cả bản 2-USB và 1-USB làm 1 firmware duy nhất nhờ tính năng Đảo ngược màu).
+- **`CYD2.8-USB-131026-b15.bin`**: Bản cắm cáp USB Serial 115200 cho màn 2.8" (Tích hợp cả bản 2-USB và 1-USB).
+- **`CYD3.5-BLE-131026-b15.bin`**: Bản Bluetooth BLE cho module ESP32-S3 3.5" ST77922 QSPI 480×320 (đã sửa dứt điểm lỗi bootloop).
+
+### ⚙️ Nâng cấp Chuẩn Cài đặt HLP Device Config Schema Rev 7 (9 mục)
+- **Mục 1 (`fixed_brightness` - Cố định độ sáng, toggle):**
+  - Khi **ON**: Mở khóa Mục 2 (`brightness`) cho phép chỉnh độ sáng tùy ý từ App, độ sáng này sẽ giữ cố định và ưu tiên cao hơn chế độ tự động theo giờ.
+  - Khi **OFF**: Khóa Mục 2 và tự động hoàn trả độ sáng theo khung giờ thực tế (100% ban ngày / 20% ban đêm).
+- **Mục 4 (`invert_color` - Đảo ngược màu, toggle):**
+  - Đảo cực tính màn hình LCD phần cứng (`INVOFF` / `INVON`), cho phép người dùng dùng mạch CYD 1-USB hay 2-USB đều hiển thị chuẩn màu trên cùng một file firmware.
+
+### 🌙 Giảm độ sáng ban đêm về 20%
+- Trong khung giờ từ **19:00 đến 05:00 sáng**, HUD tự động hạ độ sáng về mức **20%** (thay vì 30% trước đây) giúp chống chói mắt tối đa khi lái xe ban đêm.
+
+### 🎨 Thang màu khoảng cách biển báo 4 cấp độ trực quan
+- **`> 600m`**: Màu xanh lá cây (`Green`) - Khoảng cách còn xa, trạng thái an toàn.
+- **`300m – 600m`**: Màu trắng (`White`) - Đang tiến lại gần cảnh báo.
+- **`100m – 300m`**: Màu cam vàng (`Amber`) - Cảnh giác, sẵn sàng giảm tốc độ.
+- **`< 100m`**: Màu đỏ tươi (`Red`) - Rất gần vị trí cảnh báo / điểm bắn tốc độ.
+
+### 🚗 Tên đường tiếp theo trượt mượt mà 30 FPS dưới biển báo tốc độ (Smooth Marquee)
+- **Hợp nhất Canvas Nguyên tử (`MainCluster` $225 \times 130\text{ px}$):** Ghép cụm Điều hướng (Maneuver) và Cụm tốc độ (SpeedCluster) thành một vùng vẽ liền mạch duy nhất. Loại bỏ hoàn toàn đường cắt vạch dọc cũ ($x = 85$ và $x = 122$) và hiện tượng xé hình/giật khựng khi chữ đi qua điểm nối.
+- **Hiệu ứng trượt lọt tự nhiên:** Tên đường kế tiếp vươn dài từ $x = 5$ chạy thẳng một mạch và lọt êm ái dưới đường viền tròn của biển báo tốc độ ($R = 60$).
+- **Nâng tốc độ animation lên ~30 FPS:** Giảm chu kỳ tick UI từ 80ms xuống **35ms**, giảm thời gian dịch từ 45ms/px xuống **28ms/pixel**, rút ngắn thời gian dừng đọc đầu/cuối còn **1.0s / 0.5s** giúp trải nghiệm trượt chữ cực kỳ thanh thoát và êm ái.
+
+### 🛠️ Sửa lỗi Bootloop trên phiên bản 3.5" (ESP32-S3)
+- Bật cờ `CONFIG_SPIRAM_IGNORE_NOTFOUND=y` chống crash `abort()` khi khởi động trên board dùng Quad PSRAM hoặc không có PSRAM.
+- Cung cấp cơ chế fallback an toàn cho bộ đệm vẽ DMA, chống tràn RAM DMA khi NimBLE chạy đồng thời.
+
+### 🔌 Khắc phục Triệt để Lỗi Phân làn & Cài đặt App trên bản USB Serial (`CYD2.8-USB`)
+- **Bổ sung bản tin HLP `dev` opt-in phân làn:** Khắc phục lỗi Waze Mod không gửi dữ liệu làn đường (`lan`) và chỉ gửi 1 cảnh báo (`alr`) do thiếu bản tin khai báo thiết bị `dev` trên kết nối Serial. Bổ sung cơ chế phát `dev` an toàn khi khởi động và theo phiên `sess` mới, chặn đứng nguy cơ lặp vô tận `dev` ↔ `hi`.
+- **Nâng bộ đệm TX UART lên 2048 byte:** Đảm bảo nạp và phát trọn bộ 11 gói schema cài đặt HLP Device Config (~1.2 KB) tức thì, loại bỏ hoàn toàn hiện tượng nghẽn luồng CPU khi Waze Mod kết nối hoặc mở giao diện cài đặt trên App.
+
+---
+
 ## [Build 14 (v2.8.14-b14)] - 2026-10-08
 
 > Bản phát hành B14 nâng cấp toàn diện hệ thống hiển thị mũi tên làn đường chếch 45° (Slight Left / Right) với đường cong uốn lượn mềm mại, căn giữa chuẩn xác, cơ chế render phân lớp Z-Order và khắc phục triệt để lỗi bắt tay giao thức/cài đặt trên ứng dụng điện thoại.
