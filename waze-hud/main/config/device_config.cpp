@@ -14,7 +14,7 @@ namespace {
 constexpr char kTag[] = "CONFIG";
 constexpr char kNamespace[] = "hud_cfg";
 constexpr int kItemCount = 9;
-constexpr uint32_t kSchemaRevision = 6;
+constexpr uint32_t kSchemaRevision = 7;
 
 bool validBrightness(int value) {
     return value >= 10 && value <= 100 && ((value - 10) % 5) == 0;
@@ -70,10 +70,10 @@ void sendAck(uint32_t tx, bool ok, uint32_t revision, const char *field,
 esp_err_t saveSettings(const DeviceSettings &settings) {
     nvs_handle_t nvs;
     ESP_RETURN_ON_ERROR(nvs_open(kNamespace, NVS_READWRITE, &nvs), kTag, "NVS open failed");
-    esp_err_t result = nvs_set_u8(nvs, "brightness", settings.brightness);
+    esp_err_t result = nvs_set_u8(nvs, "fixed_brt", settings.fixedBrightness ? 1 : 0);
+    if (result == ESP_OK) result = nvs_set_u8(nvs, "brightness", settings.brightness);
     if (result == ESP_OK) result = nvs_set_u8(nvs, "theme", static_cast<uint8_t>(settings.theme));
-    if (result == ESP_OK) result = nvs_set_u8(nvs, "speed_mode", static_cast<uint8_t>(settings.speedDisplayMode));
-    if (result == ESP_OK) result = nvs_set_u8(nvs, "street", settings.showStreet ? 1 : 0);
+    if (result == ESP_OK) result = nvs_set_u8(nvs, "invert_col", settings.invertColor ? 1 : 0);
     if (result == ESP_OK) result = nvs_set_u8(nvs, "mirror", settings.mirrorHud ? 1 : 0);
     if (result == ESP_OK) result = nvs_set_u8(nvs, "rotate", settings.rotateDisplay ? 1 : 0);
     if (result == ESP_OK) result = nvs_set_i8(nvs, "over_offset", settings.overspeedOffsetKmh);
@@ -126,16 +126,14 @@ esp_err_t DeviceConfig::init() {
     }
     ESP_RETURN_ON_ERROR(opened, kTag, "NVS configuration open failed");
     uint8_t byte = 0;
+    if (nvs_get_u8(nvs, "fixed_brt", &byte) == ESP_OK) active_.fixedBrightness = byte != 0;
     if (nvs_get_u8(nvs, "brightness", &byte) == ESP_OK) {
         if (validBrightness(byte)) active_.brightness = byte;
         else ESP_LOGW(kTag, "Ignoring stored brightness %u: not aligned to 5%% step", byte);
     }
     if (nvs_get_u8(nvs, "theme", &byte) == ESP_OK && byte <= static_cast<uint8_t>(UiTheme::Night))
         active_.theme = static_cast<UiTheme>(byte);
-    if (nvs_get_u8(nvs, "speed_mode", &byte) == ESP_OK &&
-        byte <= static_cast<uint8_t>(SpeedDisplayMode::LimitPrimary))
-        active_.speedDisplayMode = static_cast<SpeedDisplayMode>(byte);
-    if (nvs_get_u8(nvs, "street", &byte) == ESP_OK) active_.showStreet = byte != 0;
+    if (nvs_get_u8(nvs, "invert_col", &byte) == ESP_OK) active_.invertColor = byte != 0;
     if (nvs_get_u8(nvs, "mirror", &byte) == ESP_OK) active_.mirrorHud = byte != 0;
     if (nvs_get_u8(nvs, "rotate", &byte) == ESP_OK) active_.rotateDisplay = byte != 0;
     int8_t offset = 0;
@@ -158,8 +156,9 @@ esp_err_t DeviceConfig::init() {
                  static_cast<unsigned long>(kSchemaRevision),
                  static_cast<unsigned long>(active_.revision));
     }
-    ESP_LOGI(kTag, "Loaded revision %lu, brightness %u%%",
-             static_cast<unsigned long>(active_.revision), active_.brightness);
+    ESP_LOGI(kTag, "Loaded revision %lu, fixedBrightness=%d, brightness=%u%%, invertColor=%d",
+             static_cast<unsigned long>(active_.revision), active_.fixedBrightness ? 1 : 0,
+             active_.brightness, active_.invertColor ? 1 : 0);
     return ESP_OK;
 }
 
@@ -218,18 +217,8 @@ void DeviceConfig::publishSchema(HlpSendLine send, void *context) {
     cJSON_AddStringToObject(root, "title", "Cau hinh Waze HUD");
     sendJson(root, send, context);
 
-    root = schemaItem(settings.revision, "speed_display", "selection", "Hien thi toc do");
-    cJSON_AddStringToObject(root, "value",
-        settings.speedDisplayMode == SpeedDisplayMode::LimitPrimary ? "limit_main" : "current_main");
-    cJSON *options = cJSON_AddArrayToObject(root, "options");
-    const char *speedValues[] = {"current_main", "limit_main"};
-    const char *speedLabels[] = {"Toc do hien tai", "Bien gioi han"};
-    for (int i = 0; i < 2; ++i) {
-        cJSON *option = cJSON_CreateObject();
-        cJSON_AddStringToObject(option, "value", speedValues[i]);
-        cJSON_AddStringToObject(option, "label", speedLabels[i]);
-        cJSON_AddItemToArray(options, option);
-    }
+    root = schemaItem(settings.revision, "fixed_brightness", "toggle", "Co dinh do sang");
+    cJSON_AddBoolToObject(root, "value", settings.fixedBrightness);
     sendJson(root, send, context);
 
     root = schemaItem(settings.revision, "brightness", "slider", "Do sang");
@@ -240,7 +229,7 @@ void DeviceConfig::publishSchema(HlpSendLine send, void *context) {
     root = schemaItem(settings.revision, "theme", "selection", "Giao dien");
     const char *theme = settings.theme == UiTheme::Day ? "day" : settings.theme == UiTheme::Night ? "night" : "auto";
     cJSON_AddStringToObject(root, "value", theme);
-    options = cJSON_AddArrayToObject(root, "options");
+    cJSON *options = cJSON_AddArrayToObject(root, "options");
     const char *values[] = {"auto", "day", "night"};
     const char *labels[] = {"Tu dong", "Ban ngay", "Ban dem"};
     for (int i = 0; i < 3; ++i) {
@@ -250,8 +239,8 @@ void DeviceConfig::publishSchema(HlpSendLine send, void *context) {
     }
     sendJson(root, send, context);
 
-    root = schemaItem(settings.revision, "show_street", "toggle", "Hien ten duong");
-    cJSON_AddBoolToObject(root, "value", settings.showStreet); sendJson(root, send, context);
+    root = schemaItem(settings.revision, "invert_color", "toggle", "Dao nguoc mau");
+    cJSON_AddBoolToObject(root, "value", settings.invertColor); sendJson(root, send, context);
 
     root = schemaItem(settings.revision, "mirror_hud", "toggle", "Phan chieu HUD");
     cJSON_AddBoolToObject(root, "value", settings.mirrorHud); sendJson(root, send, context);
@@ -319,8 +308,8 @@ bool DeviceConfig::handleMessage(const cJSON *root, HlpSendLine send, void *cont
             else if (valid && std::strcmp(value->valuestring, "day") == 0) pending.draft.theme = UiTheme::Day;
             else if (valid && std::strcmp(value->valuestring, "night") == 0) pending.draft.theme = UiTheme::Night;
             else valid = false;
-        } else if (std::strcmp(id->valuestring, "show_street") == 0) {
-            bit = 1U << 2; valid = cJSON_IsBool(value); if (valid) pending.draft.showStreet = cJSON_IsTrue(value);
+        } else if (std::strcmp(id->valuestring, "invert_color") == 0) {
+            bit = 1U << 2; valid = cJSON_IsBool(value); if (valid) pending.draft.invertColor = cJSON_IsTrue(value);
         } else if (std::strcmp(id->valuestring, "mirror_hud") == 0) {
             bit = 1U << 5; valid = cJSON_IsBool(value); if (valid) pending.draft.mirrorHud = cJSON_IsTrue(value);
         } else if (std::strcmp(id->valuestring, "rotate_display") == 0) {
@@ -332,13 +321,8 @@ bool DeviceConfig::handleMessage(const cJSON *root, HlpSendLine send, void *cont
             bit = 1U << 3; valid = exactInteger(value, -5, 5, integer); if (valid) pending.draft.offsetX = integer;
         } else if (std::strcmp(id->valuestring, "offset_y") == 0) {
             bit = 1U << 4; valid = exactInteger(value, -5, 5, integer); if (valid) pending.draft.offsetY = integer;
-        } else if (std::strcmp(id->valuestring, "speed_display") == 0) {
-            bit = 1U << 8; valid = cJSON_IsString(value);
-            if (valid && std::strcmp(value->valuestring, "current_main") == 0)
-                pending.draft.speedDisplayMode = SpeedDisplayMode::CurrentPrimary;
-            else if (valid && std::strcmp(value->valuestring, "limit_main") == 0)
-                pending.draft.speedDisplayMode = SpeedDisplayMode::LimitPrimary;
-            else valid = false;
+        } else if (std::strcmp(id->valuestring, "fixed_brightness") == 0) {
+            bit = 1U << 8; valid = cJSON_IsBool(value); if (valid) pending.draft.fixedBrightness = cJSON_IsTrue(value);
         } else valid = false;
         if ((pending.mask & bit) != 0) valid = false;
         if (!valid) {
@@ -362,19 +346,28 @@ bool DeviceConfig::handleMessage(const cJSON *root, HlpSendLine send, void *cont
             pending = {};
             return true;
         }
+        const DeviceSettings current = snapshot();
+        bool brightnessLocked = false;
+        if (!pending.draft.fixedBrightness && pending.draft.brightness != current.brightness) {
+            pending.draft.brightness = current.brightness;
+            brightnessLocked = true;
+        }
         pending.draft.revision++;
         const esp_err_t saved = saveSettings(pending.draft);
         lastTransaction = pending.id;
         lastTransactionOk = saved == ESP_OK;
-        lastTransactionRevision = saved == ESP_OK ? pending.draft.revision : snapshot().revision;
+        lastTransactionRevision = saved == ESP_OK ? pending.draft.revision : current.revision;
         if (saved == ESP_OK) {
             taskENTER_CRITICAL(&lock_); active_ = pending.draft; taskEXIT_CRITICAL(&lock_);
             sendAck(pending.id, true, pending.draft.revision, nullptr, nullptr, send, context);
+            if (brightnessLocked) {
+                publishSchema(send, context);
+            }
             ESP_LOGI(kTag, "Committed configuration revision %lu", static_cast<unsigned long>(pending.draft.revision));
             HudStateStore::instance().refresh();
         } else {
             ESP_LOGE(kTag, "NVS commit failed: %s", esp_err_to_name(saved));
-            sendAck(pending.id, false, snapshot().revision, nullptr, "NVS write failed", send, context);
+            sendAck(pending.id, false, current.revision, nullptr, "NVS write failed", send, context);
         }
         pending = {};
         return true;

@@ -8,19 +8,18 @@
 namespace waze_hud {
 
 enum class UiTheme : uint8_t { Auto, Day, Night };
-enum class SpeedDisplayMode : uint8_t { CurrentPrimary, LimitPrimary };
 
 struct DeviceSettings {
+    bool fixedBrightness{false};
     uint8_t brightness{100};
     UiTheme theme{UiTheme::Auto};
-    SpeedDisplayMode speedDisplayMode{SpeedDisplayMode::LimitPrimary};
-    bool showStreet{true};
+    bool invertColor{false};
     bool mirrorHud{false};
     bool rotateDisplay{true};
     int8_t overspeedOffsetKmh{0};
     int8_t offsetX{0};
     int8_t offsetY{0};
-    uint32_t revision{6};
+    uint32_t revision{7};
 };
 
 using HlpSendLine = void (*)(const char *line, void *context);
