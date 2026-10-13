@@ -20,5 +20,6 @@ constexpr uint16_t Green = rgb565(55, 200, 105);
 constexpr uint16_t White = rgb565(255, 255, 255);
 constexpr uint16_t Black = rgb565(0, 0, 0);
 constexpr uint16_t Cyan = rgb565(0, 229, 255);
+constexpr uint16_t Yellow = rgb565(255, 221, 0);
 
 }  // namespace waze_hud::colors

@@ -103,6 +103,42 @@ uint16_t bleSignalColor(const SystemStatusSnapshot &status) {
 }
 #endif
 
+// ASCII text drawn one glyph at a time with 1 px tighter advance, used for the
+// date/clock row where the column is only 95 px wide.
+constexpr int kTightTracking = 1;
+
+int tightTextWidth(const Canvas &canvas, const char *text, const assets::BitmapFont &font) {
+    int width = 0;
+    for (const char *c = text; *c; ++c) {
+        const char one[2] = {*c, 0};
+        width += canvas.fontTextWidth(one, font) - kTightTracking;
+    }
+    return width;
+}
+
+void drawTightText(Canvas &canvas, int x, int y, const char *text,
+                   const assets::BitmapFont &font, uint16_t color) {
+    for (const char *c = text; *c; ++c) {
+        const char one[2] = {*c, 0};
+        canvas.fontText(x, y, one, font, color, -1, false);
+        x += canvas.fontTextWidth(one, font) - kTightTracking;
+    }
+}
+
+// Days since 1970-01-01 -> civil date (Howard Hinnant's algorithm).
+void civilFromDays(int64_t days, int &year, int &month, int &day) {
+    days += 719468;
+    const int64_t era = (days >= 0 ? days : days - 146096) / 146097;
+    const int64_t dayOfEra = days - era * 146097;
+    const int64_t yearOfEra =
+        (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365;
+    const int64_t dayOfYear = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100);
+    const int64_t monthIndex = (5 * dayOfYear + 2) / 153;
+    day = static_cast<int>(dayOfYear - (153 * monthIndex + 2) / 5 + 1);
+    month = static_cast<int>(monthIndex < 10 ? monthIndex + 3 : monthIndex - 9);
+    year = static_cast<int>(yearOfEra + era * 400 + (month <= 2 ? 1 : 0));
+}
+
 int64_t localClockMillis(const HudState &state) {
     if (state.clockUnixSeconds <= 0) return INT64_MIN;
     const uint64_t nowMs = static_cast<uint64_t>(esp_timer_get_time() / 1000);
@@ -1610,9 +1646,23 @@ void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const Devi
         char clock[8];
         std::snprintf(clock, sizeof(clock), "%02d:%02d",
                       normalizedMinute / 60, normalizedMinute % 60);
-        const int clockWidth = canvas.fontTextWidth(clock, assets::kTextMedium);
-        const int clockX = canvas.width() - clockWidth - 5;
-        canvas.fontText(clockX, 4, clock, assets::kTextMedium, colors::White, -1, false);
+        // Date and clock share the medium font. Two 50 px strings do not fit
+        // the 95 px column, so both are drawn with 1 px tighter letter spacing.
+        int year = 0, month = 0, day = 0;
+        civilFromDays(second / 86400, year, month, day);
+        char date[8];
+        std::snprintf(date, sizeof(date), "%02d/%02d", day, month);
+        // A 1 px vertical bar separates them: date | clock.
+        constexpr int kGap = 1;
+        constexpr int kSeparatorWidth = 1;
+        const int clockWidth = tightTextWidth(canvas, clock, assets::kTextMedium);
+        const int dateWidth = tightTextWidth(canvas, date, assets::kTextMedium);
+        const int clockX = canvas.width() - clockWidth;
+        const int separatorX = clockX - kGap - kSeparatorWidth;
+        const int dateX = std::max(0, separatorX - kGap - dateWidth);
+        drawTightText(canvas, dateX, 4, date, assets::kTextMedium, colors::Yellow);
+        canvas.fillRect(separatorX, 5, kSeparatorWidth, 15, colors::Muted);
+        drawTightText(canvas, clockX, 4, clock, assets::kTextMedium, colors::White);
     }
 
     AlertState allAlerts[8];
