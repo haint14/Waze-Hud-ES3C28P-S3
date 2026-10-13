@@ -31,6 +31,34 @@ config WAZE_HUD_LCD_RGB_ORDER_BGR
     help
         Disable if red and blue appear swapped.
 
+config WAZE_HUD_AUDIO_ALERT
+    bool "Play an overspeed alert through the on-board speaker"
+    depends on WAZE_HUD_BOARD_ES3C28P
+    default y
+    help
+        Uses the ES8311 codec and speaker amplifier of the ES3C28P board.
+
+config WAZE_HUD_AUDIO_VOLUME
+    int "Alert volume (percent)"
+    depends on WAZE_HUD_AUDIO_ALERT
+    range 1 100
+    default 70
+
+config WAZE_HUD_AUDIO_REPEAT_SEC
+    int "Seconds between repeated alerts while still overspeeding"
+    depends on WAZE_HUD_AUDIO_ALERT
+    range 2 60
+    default 3
+
+config WAZE_HUD_AUDIO_USE_VOICE
+    bool "Play the recorded voice clip instead of a beep"
+    depends on WAZE_HUD_AUDIO_ALERT
+    default n
+    help
+        Requires main/audio/overspeed_voice.cpp to be generated from a WAV
+        file with tools/wav_to_voice_clip.py. Falls back to the beep when
+        the clip is empty.
+
 config WAZE_HUD_MOCK_MODE
     bool "Enable renderer mock mode"
     default n

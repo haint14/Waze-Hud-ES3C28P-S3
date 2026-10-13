@@ -1,3 +1,7 @@
 dependencies:
   idf: ">=5.3"
   espressif/esp_lcd_ili9341: "^2.0.2"
+  espressif/es8311:
+    version: "^1.0.0"
+    rules:
+      - if: "target in [esp32s3]"

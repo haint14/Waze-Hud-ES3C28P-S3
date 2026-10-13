@@ -1,6 +1,14 @@
+set(waze_hud_extra_requires "")
+if(IDF_TARGET STREQUAL "esp32s3")
+    # ES3C28P speaker path: ES8311 codec over legacy I2C + I2S output.
+    list(APPEND waze_hud_extra_requires driver esp_driver_i2s espressif__es8311)
+endif()
+
 idf_component_register(
     SRCS
         "app_main.cpp"
+        "audio/overspeed_audio.cpp"
+        "audio/overspeed_voice.cpp"
         "bluetooth/ble_transport.cpp"
         "protocol/hlp_core.c"
         "protocol/hlp_protocol.cpp"
@@ -14,6 +22,7 @@ idf_component_register(
         "system/system_status.cpp"
     INCLUDE_DIRS "."
     REQUIRES bt esp_adc esp_lcd esp_driver_gpio esp_driver_ledc esp_driver_spi esp_hw_support nvs_flash json
+             ${waze_hud_extra_requires}
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE

@@ -1,3 +1,4 @@
+#include "audio/overspeed_audio.h"
 #include "bluetooth/ble_transport.h"
 #include "config/device_config.h"
 #include "display/display_driver.h"
@@ -359,6 +360,12 @@ extern "C" void app_main() {
     ESP_ERROR_CHECK(startOrientationButton());
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28 && !CONFIG_WAZE_HUD_BOARD_ES3C28P
     ESP_ERROR_CHECK(startOverspeedLed());
+#endif
+#if CONFIG_WAZE_HUD_BOARD_ES3C28P
+    // Audio is optional: a missing codec must not stop the HUD from running.
+    const esp_err_t audioResult = startOverspeedAudio();
+    if (audioResult != ESP_OK)
+        ESP_LOGW("APP", "Overspeed audio unavailable: %s", esp_err_to_name(audioResult));
 #endif
     ESP_ERROR_CHECK(xTaskCreate(systemStatusTask, "hud_status", 3072, nullptr, 3, nullptr) == pdPASS
                         ? ESP_OK : ESP_ERR_NO_MEM);
