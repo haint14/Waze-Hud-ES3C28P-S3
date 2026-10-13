@@ -10,7 +10,7 @@ Dự án WazeHUD tối ưu cho màn hình ESP32-2432S028 (CYD 2.8 inch). Toàn b
 
 ### 📦 Tinh gọn & Thống nhất còn đúng 3 Firmware Factory duy nhất (Offset 0x0)
 - **`CYD2.8-BLE-131026-b15.bin`**: Bản Bluetooth BLE cho màn 2.8" (Tích hợp cả bản 2-USB và 1-USB làm 1 firmware duy nhất nhờ tính năng Đảo ngược màu).
-- **`CYD2.8-Serial-131026-b15.bin`**: Bản cắm cáp USB Serial 115200 cho màn 2.8" (Tích hợp cả bản 2-USB và 1-USB).
+- **`CYD2.8-USB-131026-b15.bin`**: Bản cắm cáp USB Serial 115200 cho màn 2.8" (Tích hợp cả bản 2-USB và 1-USB).
 - **`CYD3.5-BLE-131026-b15.bin`**: Bản Bluetooth BLE cho module ESP32-S3 3.5" ST77922 QSPI 480×320 (đã sửa dứt điểm lỗi bootloop).
 
 ### ⚙️ Nâng cấp Chuẩn Cài đặt HLP Device Config Schema Rev 7 (9 mục)
@@ -29,14 +29,16 @@ Dự án WazeHUD tối ưu cho màn hình ESP32-2432S028 (CYD 2.8 inch). Toàn b
 - **`100m – 300m`**: Màu cam vàng (`Amber`) - Cảnh giác, sẵn sàng giảm tốc độ.
 - **`< 100m`**: Màu đỏ tươi (`Red`) - Rất gần vị trí cảnh báo / điểm bắn tốc độ.
 
-### 🚗 Thiết kế Tên đường tiếp theo trượt lọt dưới biển báo tốc độ
-- Độ dài tên đường kế tiếp mở rộng từ 75px lên **105px**, phần đuôi tên đường vươn sang góc màn hình và trượt mượt mà bên dưới viền biển báo tốc độ tròn với lớp mặt nạ che bo tròn sắc nét.
+### 🚗 Tên đường tiếp theo trượt mượt mà 30 FPS dưới biển báo tốc độ (Smooth Marquee)
+- **Hợp nhất Canvas Nguyên tử (`MainCluster` $225 \times 130\text{ px}$):** Ghép cụm Điều hướng (Maneuver) và Cụm tốc độ (SpeedCluster) thành một vùng vẽ liền mạch duy nhất. Loại bỏ hoàn toàn đường cắt vạch dọc cũ ($x = 85$ và $x = 122$) và hiện tượng xé hình/giật khựng khi chữ đi qua điểm nối.
+- **Hiệu ứng trượt lọt tự nhiên:** Tên đường kế tiếp vươn dài từ $x = 5$ chạy thẳng một mạch và lọt êm ái dưới đường viền tròn của biển báo tốc độ ($R = 60$).
+- **Nâng tốc độ animation lên ~30 FPS:** Giảm chu kỳ tick UI từ 80ms xuống **35ms**, giảm thời gian dịch từ 45ms/px xuống **28ms/pixel**, rút ngắn thời gian dừng đọc đầu/cuối còn **1.0s / 0.5s** giúp trải nghiệm trượt chữ cực kỳ thanh thoát và êm ái.
 
 ### 🛠️ Sửa lỗi Bootloop trên phiên bản 3.5" (ESP32-S3)
 - Bật cờ `CONFIG_SPIRAM_IGNORE_NOTFOUND=y` chống crash `abort()` khi khởi động trên board dùng Quad PSRAM hoặc không có PSRAM.
 - Cung cấp cơ chế fallback an toàn cho bộ đệm vẽ DMA, chống tràn RAM DMA khi NimBLE chạy đồng thời.
 
-### 🔌 Khắc phục Triệt để Lỗi Phân làn & Cài đặt App trên bản USB Serial (`CYD2.8-Serial`)
+### 🔌 Khắc phục Triệt để Lỗi Phân làn & Cài đặt App trên bản USB Serial (`CYD2.8-USB`)
 - **Bổ sung bản tin HLP `dev` opt-in phân làn:** Khắc phục lỗi Waze Mod không gửi dữ liệu làn đường (`lan`) và chỉ gửi 1 cảnh báo (`alr`) do thiếu bản tin khai báo thiết bị `dev` trên kết nối Serial. Bổ sung cơ chế phát `dev` an toàn khi khởi động và theo phiên `sess` mới, chặn đứng nguy cơ lặp vô tận `dev` ↔ `hi`.
 - **Nâng bộ đệm TX UART lên 2048 byte:** Đảm bảo nạp và phát trọn bộ 11 gói schema cài đặt HLP Device Config (~1.2 KB) tức thì, loại bỏ hoàn toàn hiện tượng nghẽn luồng CPU khi Waze Mod kết nối hoặc mở giao diện cài đặt trên App.
 
