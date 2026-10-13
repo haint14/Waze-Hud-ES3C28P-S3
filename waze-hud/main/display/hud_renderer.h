@@ -28,6 +28,7 @@ private:
     void renderMainIndicators(Canvas &canvas, const Rect &region,
                               const SystemStatusSnapshot &systemStatus);
     void renderStatus(Canvas &canvas, const Rect &region, const HudState &state, const DeviceSettings &settings);
+    void renderMainCluster(Canvas &canvas, const HudState &state, const DeviceSettings &settings);
     void renderManeuver(Canvas &canvas, const HudState &state, const DeviceSettings &settings);
     void renderSpeedCluster(Canvas &canvas, const HudState &state, const DeviceSettings &settings);
     void renderAlerts(Canvas &canvas, const HudState &state, const DeviceSettings &settings);

@@ -63,6 +63,7 @@ constexpr Rect SpeedCluster{85, 0, 139, MainHeight};
 constexpr Rect Alerts{224, 0, 96, MainHeight};
 #else
 constexpr Rect SpeedCluster{85, 0, 140, MainHeight};
+constexpr Rect MainCluster{0, 0, 225, MainHeight};
 constexpr Rect Alerts{225, 0, 95, MainHeight};
 #endif
 constexpr Rect Street{0, MainHeight, Width, StreetHeight};
@@ -89,7 +90,11 @@ constexpr int regionPixels(const Rect &logical) {
 
 constexpr int maxInt(int left, int right) { return left > right ? left : right; }
 constexpr int MaxRegionPixels = maxInt(
+#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
+    regionPixels(MainCluster),
+#else
     maxInt(regionPixels(Maneuver), regionPixels(SpeedCluster)),
+#endif
     maxInt(regionPixels(Alerts),
            maxInt(regionPixels(Guidance), regionPixels(Street))));
 
@@ -98,9 +103,14 @@ static_assert(physicalRect(Full).x == 0 && physicalRect(Full).y == 0,
 static_assert(physicalRect(Full).width == PhysicalWidth &&
               physicalRect(Full).height == PhysicalHeight,
               "Display viewport must cover the complete framebuffer");
+#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
+static_assert(physicalRect(MainCluster).width + physicalRect(Alerts).width == PhysicalWidth,
+              "HUD columns must cover the framebuffer without gaps");
+#else
 static_assert(physicalRect(Maneuver).width + physicalRect(SpeedCluster).width +
               physicalRect(Alerts).width == PhysicalWidth,
               "HUD columns must cover the framebuffer without gaps");
+#endif
 static_assert(physicalRect(Maneuver).height + physicalRect(Guidance).height +
               physicalRect(Street).height == PhysicalHeight,
               "HUD rows must cover the framebuffer without gaps");

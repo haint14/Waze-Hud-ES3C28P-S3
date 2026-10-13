@@ -222,7 +222,7 @@ void uiTask(void *) {
     ESP_LOGI(kTag, "Initial UI frame rendered in %lld ms",
              static_cast<long long>((esp_timer_get_time() - renderStartedUs) / 1000));
     for (;;) {
-        const TickType_t timeout = renderer.animationActive() ? pdMS_TO_TICKS(80) : portMAX_DELAY;
+        const TickType_t timeout = renderer.animationActive() ? pdMS_TO_TICKS(35) : portMAX_DELAY;
         if (HudStateStore::instance().receive(state, timeout))
             renderer.render(state, DeviceConfig::instance().snapshot(), SystemStatus::instance().snapshot());
         else if (renderer.animationActive())
