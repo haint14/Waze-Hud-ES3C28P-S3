@@ -4,6 +4,13 @@
 > **Lời cảm ơn & Tôn trọng bản quyền tác giả (Credits & Respect):**
 > Dự án này là phiên bản phát triển & tối ưu hóa mở rộng dựa trên mã nguồn gốc [WazeHUD của tác giả ShindouAris](https://github.com/ShindouAris/WazeHUD) và cộng đồng [WazeMod Vietnam](https://wazemod.io.vn). Xin trân trọng ghi nhận và cảm ơn công sức to lớn của tác giả gốc đã tạo nên nền tảng ban đầu tuyệt vời cho cộng đồng người dùng Waze! Xin hãy luôn tôn trọng tác giả gốc và chia sẻ có trích nguồn.
 
+> [!IMPORTANT]
+> **Repo này (nhánh mặc định `ES3C28P-S3`) dành cho board ESP32-S3 2.8 inch ES3C28P / ES3N28P** (loa + codec ES8311, có cảnh báo quá tốc độ bằng giọng nói).
+> - 👉 Tải firmware S3: **[Releases của repo này](https://github.com/haint14/waze-hud/releases/latest)**.
+> - Board **CYD ESP32-2432S028 (ESP32 thường)** do tác giả [quangdo92](https://github.com/quangdo92/waze-hud) duy trì: tải firmware CYD tại **[quangdo92/waze-hud Releases](https://github.com/quangdo92/waze-hud/releases/latest)**.
+> - Không nạp firmware S3 lên board CYD và ngược lại.
+> - Build bản S3: chạy `waze-hud\build_es3c28p.ps1` (xem script để biết cách nạp và bản mock).
+
 ---
 
 ## 📥 Tải Firmware (Download)
