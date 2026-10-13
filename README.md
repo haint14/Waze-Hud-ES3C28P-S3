@@ -1,127 +1,161 @@
-# WazeHUD cho màn hình CYD 2.8 inch (Bản tối ưu Taplo Ô tô)
+# WazeHUD cho ESP32-S3 2.8 inch (ES3C28P / ES3N28P)
+
+HUD ô tô hiển thị dữ liệu dẫn đường Waze qua Bluetooth BLE (giao thức HLP/1 của Waze Mod), có **cảnh báo quá tốc độ bằng giọng nói** qua loa của board.
 
 > [!NOTE]
 > **Lời cảm ơn & Tôn trọng bản quyền tác giả (Credits & Respect):**
-> Dự án này là phiên bản phát triển & tối ưu hóa mở rộng dựa trên mã nguồn gốc [WazeHUD của tác giả ShindouAris](https://github.com/ShindouAris/WazeHUD) và cộng đồng [WazeMod Vietnam](https://wazemod.io.vn). Xin trân trọng ghi nhận và cảm ơn công sức to lớn của tác giả gốc đã tạo nên nền tảng ban đầu tuyệt vời cho cộng đồng người dùng Waze! Xin hãy luôn tôn trọng tác giả gốc và chia sẻ có trích nguồn.
+> Dự án này là phiên bản phát triển & tối ưu hóa mở rộng dựa trên mã nguồn gốc [WazeHUD của tác giả ShindouAris](https://github.com/ShindouAris/WazeHUD) và cộng đồng [WazeMod Vietnam](https://wazemod.io.vn). Phần giao diện, giao thức và cấu hình kế thừa từ bản CYD của [quangdo92](https://github.com/quangdo92/waze-hud). Xin trân trọng ghi nhận và cảm ơn công sức của các tác giả. Xin hãy luôn tôn trọng tác giả gốc và chia sẻ có trích nguồn. Giấy phép: GPL-3.0.
 
 > [!IMPORTANT]
-> **Repo này (nhánh mặc định `ES3C28P-S3`) dành cho board ESP32-S3 2.8 inch ES3C28P / ES3N28P** (loa + codec ES8311, có cảnh báo quá tốc độ bằng giọng nói).
-> - 👉 Tải firmware S3: **[Releases của repo này](https://github.com/haint14/waze-hud/releases/latest)**.
-> - Board **CYD ESP32-2432S028 (ESP32 thường)** do tác giả [quangdo92](https://github.com/quangdo92/waze-hud) duy trì: tải firmware CYD tại **[quangdo92/waze-hud Releases](https://github.com/quangdo92/waze-hud/releases/latest)**.
-> - Không nạp firmware S3 lên board CYD và ngược lại.
-> - Build bản S3: chạy `waze-hud\build_es3c28p.ps1` (xem script để biết cách nạp và bản mock).
+> Repo này **chỉ dành cho board ESP32-S3 2.8 inch ES3C28P / ES3N28P** (LCDWiki).
+> Board **CYD ESP32-2432S028** (ESP32 thường) do [quangdo92](https://github.com/quangdo92/waze-hud) duy trì, vui lòng tải firmware CYD ở repo đó.
+> **Không nạp firmware S3 lên board CYD và ngược lại.**
 
 ---
 
-## 📥 Tải Firmware (Download)
+## 📥 Tải firmware
 
-👉 **Truy cập trang phát hành chính thức:** **[GitHub Releases - WazeHUD](https://github.com/quangdo92/waze-hud/releases/latest)**
+👉 **[GitHub Releases](https://github.com/haint14/waze-hud/releases/latest)**
 
-Tại trang Releases, chọn tải file `.bin` All-in-One phù hợp với phiên bản mạch phần cứng của bạn:
+| File | Dùng cho |
+|---|---|
+| `ES3C28P-BLE-<ngày>-<bản>.bin` | Dùng thật với Waze Mod qua Bluetooth BLE |
+| `ES3C28P-MOCK-<ngày>-<bản>.bin` | Chạy thử giao diện + âm thanh, **không cần điện thoại** (12 kịch bản tự đổi mỗi 5 giây) |
+| `SHA256.txt` | Mã kiểm tra toàn vẹn các file |
 
-### 🌐 Cách 1: Nạp trực tiếp qua Web Flasher (Khuyên dùng - Cực dễ cho mọi người)
-Bạn có thể sử dụng công cụ Web Flasher của tác giả WazeMod trực tiếp trên trình duyệt web (Chrome, Edge, Cốc Cốc trên máy tính hoặc điện thoại Android) mà không cần cài đặt Python hay bất kỳ phần mềm nào:
+Đây là file **Factory All-in-One** (đã gồm bootloader, bảng phân vùng và firmware), nạp tại offset **`0x0`**.
 
-1. Bấm nút **📥 Tải về** ở bảng trên để tải file `.bin` phù hợp về máy.
-2. Cắm cáp kết nối mạch CYD với máy tính qua cổng USB.
-3. Truy cập công cụ web flasher của tác giả: 👉 **[https://wazemod.io.vn/flash-firmware](https://wazemod.io.vn/flash-firmware)**
-4. Bấm **Kết nối**, chọn đúng cổng COM của mạch ESP32 CYD.
-5. Chọn file `.bin` đã tải, đảm bảo địa chỉ nạp là **`0x0`** và bấm **Flash** để hoàn tất.
+## ⚡ Cách nạp
 
-*(Mẹo: Nếu mạch không vào được chế độ flash, hãy nhấn giữ nút **BOOT**, bấm nhả nút **RESET**, sau đó thả nút **BOOT** rồi kết nối lại).*
+Cần Python và `esptool` (`pip install esptool`), hoặc dùng terminal của ESP-IDF.
 
-### 💻 Cách 2: Nạp qua dòng lệnh esptool (Dành cho Developer / Terminal)
-
-```bash
-# Nạp file Factory tương ứng tại offset 0x0
-python -m esptool --chip esp32 -b 460800 write_flash 0x0 <ten_file_factory.bin>
+```powershell
+# Thay COM5 bằng cổng COM của board
+python -m esptool --chip esp32s3 -p COM5 -b 460800 write_flash 0x0 ES3C28P-BLE-131026-b15.bin
 ```
 
----
-
-## Tính năng chính & Cải tiến nổi bật
-
-### 🚗 Tối ưu chuyên biệt cho Taplo Ô tô & Lái xe an toàn
-- **Nền đen tuyệt đối (OLED-style True Black):** Toàn bộ hình nền và các panel giao diện sử dụng màu đen thuần túy `0x0000`, tăng tối đa độ tương phản cho màn LCD, loại bỏ hoàn toàn ánh sáng viền xám mờ và chống chói lóa mắt khi đặt trên taplo xe.
-- **Tự động điều chỉnh độ sáng Ngày / Đêm theo thời gian thực:**
-  - **06:00 – 17:30 (Ban ngày):** Đèn nền tự động sáng tối đa 100% để hiển thị sắc nét ngay cả dưới ánh nắng gắt.
-  - **17:30 – 19:00 (Hoàng hôn):** Tự động giảm dần độ sáng từ 100% xuống 30% một cách êm ái.
-  - **19:00 – 05:00 (Ban đêm):** Duy trì độ sáng 30% dịu mắt, chống lóa khoang lái trong đêm tối.
-  - **05:00 – 06:00 (Bình minh):** Tăng dần độ sáng từ 30% trở lại 100%.
-- **Biển báo cảnh báo & khoảng cách cỡ lớn:**
-  - Icon biển báo cảnh báo phía trước được phóng to lên kích thước **60×60 px / 56×56 px** (so với 44px ban đầu).
-  - Chữ hiển thị số mét khoảng cách cảnh báo được nâng cấp lên font cỡ vừa **`kTextMedium` (22 px)** to rõ, quan sát cực kỳ dễ dàng khi xe chạy ở tốc độ cao.
-- **Tối ưu khu vực điều hướng rẽ:**
-  - Mũi tên chỉ hướng rẽ được nâng cao lên sát mép trên (`y=16`), giải phóng không gian phía dưới.
-  - Chữ số mét khoảng cách tới khúc rẽ tiếp theo được phóng to thành font lớn **`kTextMedium` ở vị trí `y=88`**.
-- **Viền biển báo Đỏ tươi bão hòa 100% (`0xF800`):**
-  - Chuyển toàn bộ màu viền của tất cả biển báo giới hạn tốc độ (10–120 km/h) và biển báo cấm (cấm vượt, cấm ô tô, cấm rẽ, camera đèn đỏ...) từ màu hồng phấn/cam san hô cũ sang màu đỏ cờ rực rỡ chuẩn biển báo giao thông đường bộ, khử răng cưa mượt mà.
-- **Tối ưu đèn LED RGB lưng:**
-  - Khi xe di chuyển ở tốc độ cho phép, đèn LED lưng tự động **TẮT HOÀN TOÀN** để không gây hắt sáng khó chịu lên kính lái ban đêm.
-  - Chỉ nhấp nháy đỏ cảnh báo với tần số 2 Hz khi phát hiện xe chạy quá tốc độ giới hạn.
-- **Giao diện HUD tối giản, không phân tâm:**
-  - Loại bỏ biểu tượng Bluetooth và vạch sóng ở góc trên màn hình lái xe để giao diện sạch sẽ, tập trung hoàn toàn vào cảnh báo và điều hướng.
-  - Loại bỏ hoàn toàn mảng bitmap Boot Logo để **tiết kiệm gần 28 KB bộ nhớ Flash ROM**, đồng thời căn giữa màn hình chờ kết nối chữ WazeHUD đẹp mắt.
-
-### 📡 Tính năng cốt lõi kế thừa
-- Kết nối không dây BLE tức thì với Waze Mod (tên thiết bị `WazeHUD`), tốc độ làm tươi 4 Hz.
-- Hiển thị tốc độ xe thực tế, biển báo tốc độ giới hạn, hướng rẽ và khoảng cách tới lượt rẽ.
-- Cảnh báo chướng ngại vật: Tai nạn, kẹt xe (kèm mức độ & số phút trễ), công trường, xe dừng, ngập nước, đường đóng, camera phạt nguội, kiểm tra khoảng cách, v.v.
-- Hiển thị làn đường (Lane Guidance) tối đa 10 làn với mũi tên chỉ hướng được khuyến nghị.
-- Hiển thị ETA (giờ đến), tên đường tiếng Việt có dấu (tự động chạy chữ nếu quá dài) và đồng hồ.
-- Hai chế độ hiển thị: Ưu tiên tốc độ xe hoặc Ưu tiên biển báo giới hạn tốc độ.
-- Hỗ trợ lật gương (Mirror HUD) để chiếu hắt kính lái và xoay màn hình 180° linh hoạt qua nút bấm BOOT.
-- Cơ chế Dirty-region rendering: Chỉ vẽ lại đúng vùng có dữ liệu thay đổi, đảm bảo tốc độ đáp ứng tối đa và không rung giật khung hình.
-
-## Trạng thái đèn LED RGB phía sau
-
-| Trạng thái xe & kết nối | Màu LED RGB | Ý nghĩa |
-|---|---|---|
-| Chưa kết nối điện thoại | Đổi màu RGB liên tục | Đang phát sóng BLE chờ kết nối |
-| Đã kết nối, chờ dữ liệu dẫn đường | Xanh dương | Đã kết nối BLE thành công |
-| Tốc độ bình thường (đang dẫn đường) | **TẮT** | Giữ không gian tối êm dịu, không gây chói mắt |
-| Chạy quá tốc độ giới hạn | **Nháy đỏ 2 Hz** | Cảnh báo xe đang chạy vượt tốc độ cho phép |
+- Chip: **ESP32-S3**, flash **16 MB**.
+- Nếu board không tự vào chế độ nạp: giữ nút **BOOT**, nhấn **EN (RESET)** một lần, rồi thả BOOT.
+- Cổng Type-C của board nối với USB nội của ESP32-S3. Windows 10 trở lên nhận cổng COM ảo, không cần driver riêng.
+- Công cụ Web Flasher của [WazeMod](https://wazemod.io.vn/flash-firmware) có thể dùng được nếu hỗ trợ ESP32-S3 (chưa kiểm chứng với bản này).
 
 ---
 
-## Thao tác với nút cứng (BOOT / KEY)
+## ✨ Tính năng
 
-| Thao tác nút BOOT | Tác dụng |
+### 🔊 Cảnh báo quá tốc độ bằng giọng nói
+- Phát câu **"Bạn đã quá tốc độ"** qua loa khi tốc độ vượt giới hạn + ngưỡng (chỉnh trong app) liên tục **1,5 giây**.
+- Lặp lại mỗi **4 giây** (tính từ lúc đọc xong) nếu vẫn quá tốc độ. Về tốc độ cho phép thì ngừng.
+- Dùng codec **ES8311** + bộ khuếch đại của board. Nếu không tìm thấy codec, HUD vẫn chạy bình thường (chỉ ghi cảnh báo vào log).
+- Có thể đổi giọng nói hoặc dùng tiếng bíp (xem mục *Tùy chỉnh âm thanh*).
+
+### 🚗 Giao diện HUD tối ưu cho taplo ô tô
+- Nền đen tuyệt đối, chống chói khi đặt trên taplo.
+- Hàng trên cùng: **`dd/mm | hh:mm`** (ngày/tháng màu vàng, giờ màu trắng), đồng bộ từ điện thoại.
+- Tốc độ xe và biển giới hạn tốc độ cỡ lớn. Khi quá tốc độ: viền đỏ nhấp nháy 2 Hz, số tốc độ nháy đỏ.
+- Hướng rẽ, khoảng cách tới lượt rẽ, vòng xuyến (kèm lối ra), tối đa 10 làn đường với mũi tên chỉ hướng (kể cả rẽ chếch 45°).
+- Tên đường hiện tại (có tiền tố `HT:` khi đang dẫn đường) và **tên đường kế tiếp trượt mượt ~30 FPS** dưới biển báo tốc độ.
+- ETA, quãng đường và thời gian còn lại.
+- Cảnh báo: camera phạt nguội, cảnh sát, tai nạn, kẹt xe (kèm mức độ và số phút trễ), công trường, đèn đỏ, vùng cấm vượt, các biển cấm/hiệu lệnh... hiển thị tối đa 4 thẻ khi chạy tự do.
+- **Màu số mét cảnh báo 4 mức**: xanh lá (> 600 m), trắng (300–600 m), cam (100–300 m), đỏ (< 100 m).
+- Chạy tiếng Việt có dấu (tự chạy chữ nếu tên đường quá dài).
+- Chỉ vẽ lại đúng vùng thay đổi (dirty-region), không giật khung hình.
+
+### 🌙 Độ sáng
+- **Tự động theo giờ** (mặc định): 100% ban ngày (06:00–17:30), giảm dần lúc hoàng hôn (17:30–19:00), **20%** ban đêm (19:00–05:00), tăng dần lúc bình minh (05:00–06:00).
+- Bật **"Cố định độ sáng"** trong app để dùng mức độ sáng chọn tay (10–100%).
+
+### 🎨 Đảo màu từ app
+- Mục **"Đảo ngược màu"** trong app bật/tắt chế độ đảo màu của màn hình (INVON/INVOFF) mà không cần nạp lại firmware. **Mặc định bật** cho board này. Nếu màn hình bị âm bản, hãy tắt đi.
+
+---
+
+## ⌨️ Nút BOOT (GPIO 0)
+
+| Thao tác | Tác dụng |
 |---|---|
-| Nhấn 1 lần | Xoay ngược màn hình 180° (phù hợp cắm cáp từ cạnh trên hoặc dưới) |
-| Nhấn đúp (2 lần) | Bật / Tắt chế độ lật gương (Mirror HUD) chiếu hắt kính lái |
-| Nhấn giữ | Hiển thị màn hình chuẩn đoán trạng thái thiết bị và BLE |
+| Nhấn 1 lần | Xoay màn hình 180° (tùy hướng cắm cáp) |
+| Nhấn đúp | Bật / tắt lật gương (Mirror HUD) để chiếu hắt kính lái |
+| Nhấn giữ | Hiện màn hình trạng thái thiết bị và BLE |
 
-*Các thiết lập xoay và lật gương được tự động lưu vào bộ nhớ NVS và không bị mất khi rút nguồn.*
+Các thiết lập xoay, lật gương được lưu vào NVS, không mất khi rút nguồn.
 
----
+## ⚙️ Cấu hình từ Waze Mod
 
-## Cấu hình từ Waze Mod
-
-Khi Waze Mod hỗ trợ `device_config`, HUD gửi lên các thiết lập:
+Khi Waze Mod hỗ trợ `device_config` (HLP Schema Rev 7), HUD gửi lên 9 thiết lập:
 
 | Thiết lập | Giá trị | Ý nghĩa |
 |---|---|---|
-| Độ sáng | 10–100%, bước 5% | Điều chỉnh đèn nền màn hình thủ công |
-| Giao diện | Tự động / Ban ngày / Ban đêm | Chọn màu giao diện |
-| Hiển thị tốc độ | Tốc độ hiện tại / Biển giới hạn | Chọn thành phần tốc độ chính |
-| Hiện tên đường | Bật / Tắt | Ẩn hoặc hiện tên đường |
-| Phản chiếu HUD | Bật / Tắt | Lật ngang để phản chiếu kính lái |
-| Xoay màn hình | Bật / Tắt | Xoay 180° theo hướng lắp mạch |
-| Ngưỡng quá tốc | −10 đến +5 km/h | Bù vào giới hạn trước khi cảnh báo |
+| Cố định độ sáng | Bật / Tắt | Bật để dùng độ sáng chọn tay, tắt để tự động theo giờ |
+| Độ sáng | 10–100%, bước 5% | Chỉ chỉnh được khi bật "Cố định độ sáng" |
+| Giao diện | Tự động / Ban ngày / Ban đêm | Màu giao diện biển báo |
+| Đảo ngược màu | Bật / Tắt | Đảo cực tính màn hình (INVON/INVOFF) |
+| Phản chiếu HUD | Bật / Tắt | Lật ngang để chiếu hắt kính lái |
+| Xoay màn hình | Bật / Tắt | Xoay 180° theo hướng lắp |
+| Ngưỡng quá tốc | −10 đến +5 km/h | Bù vào giới hạn trước khi cảnh báo (áp dụng cả cho giọng nói) |
 | Dịch ngang | −5 đến +5 px | Tinh chỉnh vị trí giao diện |
 | Dịch dọc | −5 đến +5 px | Tinh chỉnh vị trí giao diện |
 
 ---
 
-## Thông số phần cứng ESP32-2432S028 (CYD 2.8")
+## 🔧 Phần cứng ES3C28P / ES3N28P
 
 | Thành phần | Thông số / Chân kết nối |
 |---|---|
-| Vi điều khiển | ESP32-WROOM-32 (Dual Core 240 MHz, 4MB Flash, No PSRAM) |
-| Màn hình LCD | ILI9341 2.8 inch, SPI2 @ 40 MHz, BGR |
-| Độ phân giải | 320×240 Landscape (sử dụng dirty stripe xoay mềm 240×320) |
-| Chân SPI LCD | MOSI: GPIO 13 \| MISO: GPIO 12 \| SCLK: GPIO 14 \| CS: GPIO 15 \| DC: GPIO 2 |
-| Đèn nền (Backlight) | GPIO 21 (LEDC PWM active-high) |
-| LED RGB sau lưng | Đỏ: GPIO 4 \| Xanh lá: GPIO 16 \| Xanh dương: GPIO 17 (active-low) |
-| Nút bấm BOOT | GPIO 0 (active-low) |
+| Vi điều khiển | ESP32-S3 (Xtensa LX7 lõi kép, 240 MHz), 16 MB flash, 8 MB PSRAM OPI |
+| Màn hình LCD | ILI9341V 2.8 inch IPS, SPI @ 40 MHz, 240×320 (HUD dùng 320×240 landscape, xoay mềm) |
+| Chân LCD | CS: GPIO 10 \| DC: GPIO 46 \| SCLK: GPIO 12 \| MOSI: GPIO 11 \| MISO: GPIO 13 |
+| Reset LCD | Nối chung chân EN của ESP32-S3 (không dùng GPIO) |
+| Đèn nền | GPIO 45 (LEDC PWM) |
+| Loa / Âm thanh | Codec ES8311 (I2C: SDA 16, SCL 15; địa chỉ 0x18). I2S: MCLK 4, BCLK 5, LRCK 7, DOUT 8. Bật bộ khuếch đại: GPIO 1 (mức thấp) |
+| Nút BOOT | GPIO 0 |
+| Console / log | Cổng Type-C (USB Serial/JTAG) |
+
+**Chưa hỗ trợ trong firmware**: đèn LED RGB (WS2812, GPIO 42), đo pin (GPIO 9), cảm ứng, thẻ nhớ microSD, micro.
+
+---
+
+## 🛠️ Build từ mã nguồn
+
+Yêu cầu: **ESP-IDF 5.5.x** (đã thử với 5.5.5), Windows PowerShell. Component `espressif/es8311` và `esp_lcd_ili9341` được tải tự động.
+
+```powershell
+cd waze-hud
+.\build_es3c28p.ps1                 # -> dist\waze_hud_es3c28p_factory.bin
+.\build_es3c28p.ps1 -Mock           # -> dist\waze_hud_es3c28p_mock_factory.bin
+.\build_es3c28p.ps1 -Port COM5      # build, gộp và nạp luôn
+```
+
+Script tự dựng file Factory gộp (nạp tại `0x0`). Tham số `-IdfProfile` đổi đường dẫn profile PowerShell của ESP-IDF nếu bạn cài ở chỗ khác (mặc định `C:\Espressif\tools\Microsoft.v5.5.5.PowerShell_profile.ps1`).
+
+### Tùy chỉnh âm thanh
+Các tùy chọn nằm trong `waze-hud/sdkconfig.es3c28p.defaults` (xóa file `sdkconfig.es3c28p` rồi build lại để áp dụng):
+
+| Tùy chọn | Mặc định | Ý nghĩa |
+|---|---|---|
+| `CONFIG_WAZE_HUD_AUDIO_VOLUME` | 49 | Âm lượng (1–100) |
+| `CONFIG_WAZE_HUD_AUDIO_REPEAT_SEC` | 4 | Giây giữa hai lần cảnh báo (2–60) |
+| `CONFIG_WAZE_HUD_AUDIO_USE_VOICE` | bật | Bật: đọc giọng nói; tắt: tiếng bíp-bíp-bíp |
+| `CONFIG_WAZE_HUD_LCD_INVERT_COLOR` | bật | Mặc định đảo màu của màn hình |
+
+**Đổi giọng nói:** ghi âm câu bạn muốn, xuất ra **WAV 16-bit** (ví dụ bằng Audacity), rồi:
+
+```powershell
+python waze-hud\tools\wav_to_voice_clip.py "audio\file.wav" --end 1.40
+```
+
+`--start` / `--end` (giây) dùng để cắt lấy một đoạn. Công cụ tự đổi sang 16 kHz mono, cắt khoảng lặng, chuẩn hóa âm lượng và ghi vào `waze-hud/main/audio/overspeed_voice.cpp`; sau đó build lại. File gốc "Bạn đã quá tốc độ" nằm trong thư mục `audio/`.
+
+---
+
+## 🔄 Theo dõi cập nhật từ bản CYD
+
+Phần dùng chung (giao thức, hiển thị) được kế thừa từ [quangdo92/waze-hud](https://github.com/quangdo92/waze-hud). Để lấy cập nhật mới:
+
+```powershell
+git remote add upstream https://github.com/quangdo92/waze-hud
+git fetch upstream
+git merge upstream/CYD2.8-V2USB
+```
+
+Sau khi gộp, build lại cả hai board để chắc không vỡ (`.\build_es3c28p.ps1` cho S3, và build CYD bằng `sdkconfig.defaults` để kiểm tra).
