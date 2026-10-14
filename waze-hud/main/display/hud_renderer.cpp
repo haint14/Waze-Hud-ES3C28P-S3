@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 namespace waze_hud {
 namespace {
@@ -1536,23 +1537,59 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
 
     // 1. Phía bên trái (x = 0..84): Điều hướng / Chạy tự do
     if (!state.navigationActive || state.maneuver == Maneuver::None) {
-        canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
-        canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
-        canvas.circle(42, 80, 18, colors::Muted, 1);
-        canvas.fillCircle(42, 80, 3, colors::Green);
-        canvas.line(42, 66, 42, 75, colors::Red, 2);
-        canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
+        const int64_t clockMs = localClockMillis(state);
+        if (clockMs != INT64_MIN) {
+            const time_t localSec = static_cast<time_t>(clockMs / 1000LL);
+            struct tm tmVal{};
+            gmtime_r(&localSec, &tmVal);
+
+            static const char *const kDaysOfWeek[] = {
+                "CHỦ NHẬT", "THỨ HAI", "THỨ BA", "THỨ TƯ",
+                "THỨ NĂM", "THỨ SÁU", "THỨ BẢY"
+            };
+            const char *dayStr = (tmVal.tm_wday >= 0 && tmVal.tm_wday <= 6)
+                ? kDaysOfWeek[tmVal.tm_wday] : "";
+
+            char timeStr[16];
+            std::snprintf(timeStr, sizeof(timeStr), "%02d:%02d", tmVal.tm_hour, tmVal.tm_min);
+
+            const int year = std::clamp(tmVal.tm_year + 1900, 2000, 2099);
+            const int month = std::clamp(tmVal.tm_mon + 1, 1, 12);
+            const int mday = std::clamp(tmVal.tm_mday, 1, 31);
+            char dateStr[32];
+            std::snprintf(dateStr, sizeof(dateStr), "%02d/%02d/%04d", mday, month, year);
+
+            canvas.fontText(0, 12, dayStr, assets::kTextSmall, colors::Cyan, 84, true);
+            canvas.fontText(0, 36, timeStr, assets::kTextLarge, colors::White, 84, true);
+            canvas.line(18, 74, 66, 74, colors::Muted, 1);
+            canvas.fontText(0, 84, dateStr, assets::kTextSmall, colors::White, 84, true);
+            canvas.fontText(0, 108, "TỰ DO", assets::kTextSmall, colors::Green, 84, true);
+        } else {
+            canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
+            canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
+            canvas.circle(42, 80, 18, colors::Muted, 1);
+            canvas.fillCircle(42, 80, 3, colors::Green);
+            canvas.line(42, 66, 42, 75, colors::Red, 2);
+            canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
+        }
     } else {
         drawManeuverIcon(canvas, state.maneuver, state.roundaboutExit, colors::White);
         char distance[16]; formatDistance(state.maneuverDistanceM, distance, sizeof(distance));
         canvas.fontText(2, 98, distance, assets::kTextMedium, colors::White, 81, true);
     }
 
-    // 2. Phía bên phải (Cụm tốc độ): tâm biển báo tại signX = 155, signY = 62
+    // 2. Phía bên phải (Cụm tốc độ):
+    // Khi đang Dẫn đường và có Tên đường tiếp theo: dùng biển kích thước gọn (radius 48/40, tâm y=72)
+    // để nhường dải đen ở trên cho tên đường tiếp theo.
+    // Khi Chạy Tự do: không có tên đường tiếp theo nên giữ biển to cực đại (radius 60/50, tâm y=62)!
+    const bool isNavigating = state.navigationActive && state.maneuver != Maneuver::None;
+    const bool hasNextStreet = isNavigating && state.nextStreet[0] != 0;
+
     constexpr int signX = 155;
-    constexpr int signY = 62;
-    constexpr int outerRadius = 60;
-    constexpr int innerRadius = 50;
+    const int signY = hasNextStreet ? 72 : 62;
+    const int outerRadius = hasNextStreet ? 48 : 60;
+    const int innerRadius = hasNextStreet ? 40 : 50;
+
     constexpr int badgeW = 38;
     constexpr int badgeH = 28;
     constexpr int badgeX = 225 - badgeW - 2; // 185
@@ -1606,12 +1643,12 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
     canvas.fontText(badgeX, badgeY + (badgeH - speedFont.lineHeight) / 2,
                     speed, speedFont, speedColor, badgeW, true);
 
-    // 3. Banner tên đường tiếp theo: Nổi trên đỉnh biển báo với nền đen chữ trắng
-    if (state.navigationActive && state.maneuver != Maneuver::None && state.nextStreet[0] != 0) {
-        constexpr int bannerH = 28;
+    // 3. Banner tên đường tiếp theo: Nổi trên đỉnh biển báo với nền đen chữ trắng (chỉ khi có tên đường)
+    if (hasNextStreet) {
+        constexpr int bannerH = 26;
         canvas.fillRect(0, 0, canvas.width(), bannerH, colors::Panel);
         const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
-        canvas.fontText(5 - offset, 3, state.nextStreet.data(),
+        canvas.fontText(5 - offset, 2, state.nextStreet.data(),
                         assets::kTextMedium, colors::White, -1, false);
     }
 }
@@ -1622,12 +1659,41 @@ void HudRenderer::renderManeuver(Canvas &canvas, const HudState &state, const De
     const uint16_t fg = colors::White;
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
     if (!state.navigationActive || state.maneuver == Maneuver::None) {
-        canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
-        canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
-        canvas.circle(42, 80, 18, colors::Muted, 1);
-        canvas.fillCircle(42, 80, 3, colors::Green);
-        canvas.line(42, 66, 42, 75, colors::Red, 2);
-        canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
+        const int64_t clockMs = localClockMillis(state);
+        if (clockMs != INT64_MIN) {
+            const time_t localSec = static_cast<time_t>(clockMs / 1000LL);
+            struct tm tmVal{};
+            gmtime_r(&localSec, &tmVal);
+
+            static const char *const kDaysOfWeek[] = {
+                "CHỦ NHẬT", "THỨ HAI", "THỨ BA", "THỨ TƯ",
+                "THỨ NĂM", "THỨ SÁU", "THỨ BẢY"
+            };
+            const char *dayStr = (tmVal.tm_wday >= 0 && tmVal.tm_wday <= 6)
+                ? kDaysOfWeek[tmVal.tm_wday] : "";
+
+            char timeStr[16];
+            std::snprintf(timeStr, sizeof(timeStr), "%02d:%02d", tmVal.tm_hour, tmVal.tm_min);
+
+            const int year = std::clamp(tmVal.tm_year + 1900, 2000, 2099);
+            const int month = std::clamp(tmVal.tm_mon + 1, 1, 12);
+            const int mday = std::clamp(tmVal.tm_mday, 1, 31);
+            char dateStr[32];
+            std::snprintf(dateStr, sizeof(dateStr), "%02d/%02d/%04d", mday, month, year);
+
+            canvas.fontText(0, 12, dayStr, assets::kTextSmall, colors::Cyan, 84, true);
+            canvas.fontText(0, 36, timeStr, assets::kTextLarge, colors::White, 84, true);
+            canvas.line(18, 74, 66, 74, colors::Muted, 1);
+            canvas.fontText(0, 84, dateStr, assets::kTextSmall, colors::White, 84, true);
+            canvas.fontText(0, 108, "TỰ DO", assets::kTextSmall, colors::Green, 84, true);
+        } else {
+            canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
+            canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
+            canvas.circle(42, 80, 18, colors::Muted, 1);
+            canvas.fillCircle(42, 80, 3, colors::Green);
+            canvas.line(42, 66, 42, 75, colors::Red, 2);
+            canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
+        }
         return;
     }
     if (state.nextStreet[0] != 0) {
@@ -1735,7 +1801,7 @@ void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const Devi
 
     const int64_t millis = localClockMillis(state);
     const int64_t second = millis == INT64_MIN ? INT64_MIN : millis / 1000LL;
-    if (second != INT64_MIN) {
+    if (state.navigationActive && second != INT64_MIN) {
         const int64_t minute = second / 60;
         const int normalizedMinute = static_cast<int>((minute % 1440 + 1440) % 1440);
         char clock[8];
