@@ -979,7 +979,7 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
     const bool marqueeFrameChanged = marqueeActive_ && marqueeOffset_ != marqueeRenderedOffset_;
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
     const bool nextStreetChanged = firstFrame_ || !sameText(state.nextStreet, previous_.nextStreet);
-    constexpr int availableNextStreetWidth = 105;
+    constexpr int availableNextStreetWidth = 215;
     const int nextStreetWidth = state.nextStreet[0] != 0
         ? metrics.fontTextWidth(state.nextStreet.data(), assets::kTextMedium) : 0;
     const bool shouldNextStreetMarquee = state.connected && state.hasProducerState &&
@@ -1543,12 +1543,6 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
         canvas.line(42, 66, 42, 75, colors::Red, 2);
         canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
     } else {
-        // Tên đường kế tiếp (trượt từ x = 5 sang bên phải, chui dưới biển báo)
-        if (state.nextStreet[0] != 0) {
-            const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
-            canvas.fontText(5 - offset, 4, state.nextStreet.data(),
-                            assets::kTextMedium, colors::White, -1, false);
-        }
         drawManeuverIcon(canvas, state.maneuver, state.roundaboutExit, colors::White);
         char distance[16]; formatDistance(state.maneuverDistanceM, distance, sizeof(distance));
         canvas.fontText(2, 98, distance, assets::kTextMedium, colors::White, 81, true);
@@ -1583,7 +1577,7 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
     const uint16_t signBgColor = isNight ? colors::Panel : colors::White;
     const uint16_t signTextColor = isNight ? colors::White : colors::Black;
 
-    // Biển giới hạn tốc độ: vẽ đè lên phần đuôi tên đường tiếp theo, tạo hiệu ứng trượt lọt tự nhiên
+    // Biển giới hạn tốc độ
     canvas.fillCircle(signX, signY, outerRadius, colors::Red);
     canvas.fillCircle(signX, signY, innerRadius, signBgColor);
 
@@ -1611,6 +1605,15 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
     const auto &speedFont = (state.speedKmh >= 100) ? assets::kNumberSmall : assets::kNumberMedium;
     canvas.fontText(badgeX, badgeY + (badgeH - speedFont.lineHeight) / 2,
                     speed, speedFont, speedColor, badgeW, true);
+
+    // 3. Banner tên đường tiếp theo: Nổi trên đỉnh biển báo với nền đen chữ trắng
+    if (state.navigationActive && state.maneuver != Maneuver::None && state.nextStreet[0] != 0) {
+        constexpr int bannerH = 28;
+        canvas.fillRect(0, 0, canvas.width(), bannerH, colors::Panel);
+        const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
+        canvas.fontText(5 - offset, 3, state.nextStreet.data(),
+                        assets::kTextMedium, colors::White, -1, false);
+    }
 }
 #endif
 
@@ -1629,7 +1632,7 @@ void HudRenderer::renderManeuver(Canvas &canvas, const HudState &state, const De
     }
     if (state.nextStreet[0] != 0) {
         const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
-        canvas.fontText(5 - offset, 4, state.nextStreet.data(),
+        canvas.fontText(5 - offset, 3, state.nextStreet.data(),
                         assets::kTextMedium, colors::White, -1, false);
     }
     drawManeuverIcon(canvas, state.maneuver, state.roundaboutExit, fg);
@@ -1686,16 +1689,6 @@ void HudRenderer::renderSpeedCluster(Canvas &canvas, const HudState &state,
     const uint16_t signBgColor = isNight ? colors::Panel : colors::White;
     const uint16_t signTextColor = isNight ? colors::White : colors::Black;
 
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
-    if (state.navigationActive && state.maneuver != Maneuver::None && state.nextStreet[0] != 0) {
-        const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
-        canvas.fontText(5 - layout::Maneuver.width - offset, 4, state.nextStreet.data(),
-                        assets::kTextMedium, colors::White, -1, false);
-        canvas.fillRect(signX - 33, 0, canvas.width() - (signX - 33), 30, colors::Panel);
-        canvas.fillCircle(signX, signY, outerRadius + 2, colors::Panel);
-    }
-#endif
-
     canvas.fillCircle(signX, signY, outerRadius, colors::Red);
     canvas.fillCircle(signX, signY, innerRadius, signBgColor);
 
@@ -1725,6 +1718,16 @@ void HudRenderer::renderSpeedCluster(Canvas &canvas, const HudState &state,
     const auto &speedFont = (state.speedKmh >= 100) ? assets::kNumberSmall : assets::kNumberMedium;
     canvas.fontText(badgeX, badgeY + (badgeH - speedFont.lineHeight) / 2,
                     speed, speedFont, speedColor, badgeW, true);
+
+#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
+    if (state.navigationActive && state.maneuver != Maneuver::None && state.nextStreet[0] != 0) {
+        constexpr int bannerH = 28;
+        canvas.fillRect(0, 0, canvas.width(), bannerH, colors::Panel);
+        const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
+        canvas.fontText(5 - layout::Maneuver.width - offset, 3, state.nextStreet.data(),
+                        assets::kTextMedium, colors::White, -1, false);
+    }
+#endif
 }
 
 void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const DeviceSettings &settings) {

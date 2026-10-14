@@ -46,3 +46,4 @@ echo "  1️⃣ Full Flash (Nạp qua USB ở offset 0x0): ${FULL_BIN}"
 echo "  2️⃣ App OTA    (Nạp qua WiFi Web OTA):      ${APP_BIN}"
 echo ""
 ls -lh "${FULL_BIN}" "${APP_BIN}"
+
