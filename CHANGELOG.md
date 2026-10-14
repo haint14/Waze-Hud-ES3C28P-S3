@@ -4,6 +4,48 @@ Dự án WazeHUD tối ưu cho màn hình ESP32-2432S028 (CYD 2.8 inch). Toàn b
 
 ---
 
+## [Build 16 (v2.8.16-b16)] - 2026-10-14
+
+> [!NOTE]
+> **Lời Cảm Ơn Tác Giả Gốc & Tuyên Bố Dự Án:**
+> - Bản phát triển WazeHUD trên repository này là phiên bản cá nhân hóa, được xây dựng và tối ưu mở rộng hoàn toàn dựa trên sự hỗ trợ của **AI (Google Gemini / Antigravity)** với mục đích chính là phục vụ nhu cầu sử dụng thực tế trên xe của cá nhân mình và chia sẻ mã nguồn mở cho cộng đồng cùng tham khảo.
+> - Xin trân trọng gửi lời cảm ơn chân thành và sâu sắc nhất tới **Tác giả gốc [ShindouAris (WazeHUD)](https://github.com/ShindouAris/WazeHUD)** cùng cộng đồng **[WazeMod Vietnam](https://wazemod.io.vn)** đã tạo nên nền tảng phần mềm tuyệt vời này!
+
+> Bản phát hành B16 đánh dấu bước tiến lớn với tính năng **Cập nhật Không dây WiFi Web OTA qua màn hình cảm ứng**, làm mới toàn diện **Giao diện Chế độ Chạy Tự Do (Free Drive)** với bộ Lịch vạn niên & Đồng hồ to 30px, **Biển giới hạn tốc độ thích ứng thông minh** (to khi chạy tự do, gọn gàng khi dẫn đường), **Dải tên đường tiếp theo nổi bật trên nền đen** mở rộng gấp đôi chiều rộng hiển thị (215px), và chuẩn hóa toàn bộ file firmware vào thư mục `releases/release_b16/` với quy chuẩn đặt tên timestamp ngày_giờ.
+
+### 📦 Danh mục Firmware Phát hành B16
+Toàn bộ firmware bản B16 được lưu trữ tập trung tại thư mục [`releases/release_b16/`](file:///workspaces/waze-hud/releases/release_b16):
+- **`CYD2.8-BLE-141026-b16_full.bin`**: Bản Bluetooth BLE nạp Full Flash từ offset `0x0` qua cáp USB trên máy tính (hợp nhất 1-USB và 2-USB).
+- **`CYD2.8-BLE-141026-b16_app.bin`**: Bản Bluetooth BLE dùng để nạp trực tiếp không dây từ điện thoại qua Web OTA.
+- **`CYD2.8-USB-141026-b16.bin`**: Bản cắm cáp USB Serial 115200 cho màn 2.8" (hợp nhất 1-USB và 2-USB, nạp Full Flash offset `0x0`).
+
+### 🚀 Cập nhật Không Dây WiFi Web OTA qua Màn Hình Cảm Ứng
+- **Thao tác 2 bước an toàn (Anti-accidental trigger):** Chạm giữ màn hình (hoặc nút BOOT trên mạch) 3 giây $\rightarrow$ hiển thị modal xác nhận đếm ngược 6 giây kèm thanh tiến trình $\rightarrow$ chạm giữ tiếp 3 giây để xác nhận vào chế độ WiFi OTA.
+- **Trạm phát sóng độc lập (SoftAP Hotspot):** HUD tự động phát WiFi `WazeHUD-OTA` (mật khẩu: `12345678`), mở Web Server nạp file tại địa chỉ `http://192.168.4.1`.
+- **Giao diện Dark Mode cao cấp trên trình duyệt:** Cho phép người dùng chọn trực tiếp file `.bin` (`_app.bin`) từ điện thoại (iOS / Android) và nhấn "Bắt đầu Cập nhật" ngay trên xe mà không cần tháo HUD hay cắm máy tính.
+- **Đồng bộ tiến trình nạp (Real-time Progress):** Thanh tiến trình và tỷ lệ % nạp flash hiển thị trực tiếp đồng thời trên cả trình duyệt điện thoại lẫn màn hình HUD.
+- **An toàn tuyệt đối:** Tự động giải phóng tài nguyên BLE khi nạp, đếm ngược 180s tự thoát về HUD nếu không có thao tác, tự động khởi động lại sau khi nạp thành công.
+
+### 🕒 Làm mới Giao diện Chế độ Chạy Tự Do (Free Drive Mode)
+- **Cột bên trái ($84\text{ px}$):** Thay thế cụm biểu tượng la bàn & chữ "CHẠY TỰ DO" cũ bằng bộ Lịch & Đồng hồ tiện ích Việt hóa đầy đủ:
+  - **Dòng 1:** Thứ trong tuần (font `kTextSmall`, màu Cyan: `CHỦ NHẬT`, `THỨ HAI`, `THỨ BA`, `THỨ TƯ`, `THỨ NĂM`, `THỨ SÁU`, `THỨ BẢY`).
+  - **Dòng 2:** Giờ : Phút (font `kTextLarge` số to **30px**, màu Trắng sắc nét, cập nhật theo từng phút).
+  - **Dòng 3:** Đường phân cách mờ tinh tế.
+  - **Dòng 4:** Ngày/Tháng/Năm (font `kTextSmall`, màu Trắng: `DD/MM/YYYY`).
+  - **Dòng 5:** Nhãn trạng thái `TỰ DO` (font `kTextSmall`, màu Xanh lá).
+- **Tự động ẩn đồng hồ nhỏ góc trên bên phải:** Khi chạy tự do, đồng hồ phụ ở góc cụm cảnh báo tự động ẩn để tránh hiển thị trùng lặp 2 đồng hồ trên một màn hình. Khi bắt đầu lộ trình dẫn đường Waze, đồng hồ góc phải tự động hiển thị lại.
+
+### 🛑 Biển Giới Hạn Tốc Độ Thích Ứng Thông Minh (Adaptive Speed Sign)
+- **Khi Chạy Tự do:** Không có dải tên đường tiếp theo ở trên $\rightarrow$ Giữ nguyên biển báo tốc độ **To Cực Đại** ($R = 60\text{ px}$, $r = 50\text{ px}$, tâm $y = 62$).
+- **Khi Dẫn đường Waze:** Tự động chuyển sang kích thước gọn gàng ($R = 48\text{ px}$, $r = 40\text{ px}$, tâm $y = 72$) nhưng **giữ nguyên kích thước chữ số to đậm** (`kNumberSpeedLimit` size 48 cho 2 số, size 36 cho 3 số). Nhường dải đen $y = 0..26$ phía trên cho tên đường tiếp theo mà không làm lẹm hay cắt xén biển báo.
+- **Chế độ Ban đêm (Night Mode):** Nền biển đen (`colors::Panel`), chữ số trắng (`colors::White`), viền đỏ (`colors::Red`) tương thích hoàn hảo và liền lạc tuyệt đối với giao diện tổng thể.
+
+### 🏷️ Tên Đường Tiếp Theo Nổi Bật Trên Dải Nền Đen (Next Street Overlay Banner)
+- Dải banner trên cùng ($y = 0..26$) phủ nền đen phẳng, chữ trắng (`colors::White`) sắc nét.
+- **Mở rộng chiều rộng hiển thị khả dụng từ 105px $\rightarrow$ 215px (gấp đôi):** Hầu hết các tên đường tiếng Việt phổ biến hiển thị tĩnh trọn vẹn tức thì, không cần cuộn chữ. Chỉ các tên đường siêu dài (> 215px) mới cuộn marquee êm ái với tốc độ 30 FPS.
+
+---
+
 ## [Build 15 (v2.8.15-b15)] - 2026-10-13
 
 > Bản phát hành B15 tối ưu hóa toàn bộ hệ sinh thái firmware về **3 file BIN tinh gọn**, nâng cấp chuẩn cấu hình **HLP Device Config Schema Rev 7** (bổ sung Cố định độ sáng và Đảo ngược màu màn hình tích hợp 2USB & 1USB), thang màu số mét biển báo 4 cấp độ, giảm độ sáng đêm về 20%, tên đường kế tiếp trượt dưới biển báo tốc độ và sửa triệt để lỗi bootloop trên bản 3.5".

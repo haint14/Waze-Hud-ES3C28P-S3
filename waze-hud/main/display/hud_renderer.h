@@ -4,8 +4,11 @@
 #include "display/bitmap_font.h"
 #include "display/layout.h"
 #include "state/hud_state.h"
+#include "state/trip_stats.h"
 #include "system/system_status.h"
 #include "esp_err.h"
+#include "ota/wifi_ota_manager.h"
+#include "touch/touch_sensor.h"
 #include <cstdint>
 
 namespace waze_hud {
@@ -16,12 +19,15 @@ public:
     void render(const HudState &state, const DeviceSettings &settings,
                 const SystemStatusSnapshot &systemStatus);
     bool animationActive() const {
-        return marqueeActive_ || clockActive_ || nextStreetMarqueeActive_ || overspeedActive_;
+        return marqueeActive_ || clockActive_ || nextStreetMarqueeActive_ || overspeedActive_ ||
+               previousOtaActive_ || previousOtaConfirming_;
     }
 
 private:
     void renderRegion(const Rect &region, const HudState &state, const DeviceSettings &settings,
                       const SystemStatusSnapshot &systemStatus);
+    void renderOtaScreen(Canvas &canvas, const Rect &region, const WifiOtaSnapshot &ota);
+    void renderOtaConfirm(Canvas &canvas, const Rect &region, const TouchOtaConfirmStatus &confirm);
     void renderSystemStatus(Canvas &canvas, const Rect &region,
                             const SystemStatusSnapshot &systemStatus,
                             const DeviceSettings &settings);
@@ -56,8 +62,16 @@ private:
     bool renderedOverspeedPhase_{false};
     bool clockActive_{false};
     bool firstFrame_{true};
+    TripStats trip_{};
+    TripDisplay renderedTrip_{};
     uint8_t currentAppliedBrightness_{0};
     bool currentAppliedInvert_{false};
+    bool previousOtaActive_{false};
+    bool previousOtaConfirming_{false};
+    uint8_t previousOtaProgress_{0};
+    uint16_t previousOtaTimeout_{0};
+    uint8_t previousConfirmSeconds_{0};
+    uint8_t previousConfirmHold_{0};
 };
 
 }  // namespace waze_hud

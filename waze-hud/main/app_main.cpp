@@ -5,8 +5,10 @@
 #include "display/hud_renderer.h"
 #include "driver/gpio.h"
 #include "esp_check.h"
+#include "esp_event.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_netif.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -17,6 +19,8 @@
 #include "sdkconfig.h"
 #include "state/hud_state_store.h"
 #include "system/system_status.h"
+#include "touch/touch_sensor.h"
+#include "ota/wifi_ota_manager.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -343,6 +347,8 @@ extern "C" void app_main() {
     }
     ESP_ERROR_CHECK(result);
     recordBootReason();
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_ERROR_CHECK(DeviceConfig::instance().init());
     ESP_ERROR_CHECK(HudStateStore::instance().init() ? ESP_OK : ESP_ERR_NO_MEM);
     const esp_err_t statusResult = SystemStatus::instance().init();
@@ -358,6 +364,8 @@ extern "C" void app_main() {
 #endif
 
     ESP_ERROR_CHECK(startOrientationButton());
+    // No-op stub on the ES3C28P (see touch/touch_sensor_stub.cpp).
+    ESP_ERROR_CHECK(TouchSensor::instance().init());
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28 && !CONFIG_WAZE_HUD_BOARD_ES3C28P
     ESP_ERROR_CHECK(startOverspeedLed());
 #endif

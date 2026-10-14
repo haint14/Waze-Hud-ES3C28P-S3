@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 namespace waze_hud {
 namespace {
@@ -950,6 +951,32 @@ uint8_t collectSortedAlerts(const HudState &state, AlertState *outAlerts, uint8_
     std::sort(outAlerts, outAlerts + count, compareAlertPriority);
     return count;
 }
+
+// The free-drive trip card is shown when nothing else uses the bottom strip.
+bool tripCardVisible(const HudState &state) {
+    if (state.laneCount > 0) return false;
+    AlertState alerts[8];
+    if (collectSortedAlerts(state, alerts, 8) > 0) return false;
+    return !(state.navigationActive &&
+             (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F));
+}
+
+// One column of the trip card: small label above a medium value with a small unit.
+void drawTripStat(Canvas &canvas, int x, int width, const char *label, const char *value,
+                  const char *unit) {
+    constexpr int kLabelY = 15;
+    constexpr int kValueY = 38;
+    constexpr int kUnitGap = 3;
+    canvas.fontText(x, kLabelY, label, assets::kTextSmall, colors::Muted, width, true);
+    const int valueWidth = canvas.fontTextWidth(value, assets::kTextMedium);
+    const int unitWidth = unit[0] ? canvas.fontTextWidth(unit, assets::kTextSmall) + kUnitGap : 0;
+    const int startX = x + (width - (valueWidth + unitWidth)) / 2;
+    canvas.fontText(startX, kValueY, value, assets::kTextMedium, colors::White, -1, false);
+    if (unit[0])
+        canvas.fontText(startX + valueWidth + kUnitGap,
+                        kValueY + assets::kTextMedium.lineHeight - assets::kTextSmall.lineHeight,
+                        unit, assets::kTextSmall, colors::Muted, -1, false);
+}
 }  // namespace
 
 esp_err_t HudRenderer::init() {
@@ -965,6 +992,9 @@ esp_err_t HudRenderer::init() {
 
 void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
                          const SystemStatusSnapshot &systemStatus) {
+    trip_.update(state);
+    const TripDisplay tripNow = trip_.display();
+    const bool tripChanged = !(tripNow == renderedTrip_) && tripCardVisible(state);
     const int64_t currentClockMillis = localClockMillis(state);
     const int64_t currentClockSecond = currentClockMillis == INT64_MIN
         ? INT64_MIN : currentClockMillis / 1000LL;
@@ -1015,7 +1045,7 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
     const bool marqueeFrameChanged = marqueeActive_ && marqueeOffset_ != marqueeRenderedOffset_;
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
     const bool nextStreetChanged = firstFrame_ || !sameText(state.nextStreet, previous_.nextStreet);
-    constexpr int availableNextStreetWidth = 105;
+    constexpr int availableNextStreetWidth = 215;
     const int nextStreetWidth = state.nextStreet[0] != 0
         ? metrics.fontTextWidth(state.nextStreet.data(), assets::kTextMedium) : 0;
     const bool shouldNextStreetMarquee = state.connected && state.hasProducerState &&
@@ -1115,9 +1145,18 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
     const bool systemStatusClosed = previousSystemStatus_.visible;
     bool streetRendered = false;
     bool maneuverRendered = false;
+    const auto otaSnap = WifiOtaManager::instance().snapshot();
+    const auto confirmSnap = TouchSensor::instance().confirmStatus();
+    const bool otaChanged = otaSnap.active != previousOtaActive_ ||
+                            otaSnap.progress != previousOtaProgress_ ||
+                            otaSnap.timeoutRemaining != previousOtaTimeout_;
+    const bool confirmChanged = confirmSnap.confirming != previousOtaConfirming_ ||
+                                confirmSnap.holdPercent != previousConfirmHold_ ||
+                                confirmSnap.remainingSeconds != previousConfirmSeconds_;
+
     const bool triggerFullRedraw = systemStatusClosed || statusChanged || configChanged ||
                                    !state.connected || !state.hasProducerState ||
-                                   overspeedPhaseChanged;
+                                   overspeedPhaseChanged || otaChanged || confirmChanged;
     if (triggerFullRedraw) {
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
         renderRegion(layout::MainCluster, state, settings, systemStatus);
@@ -1163,7 +1202,7 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
                                     currentClockMinute != renderedClockMinute_ ||
                                     laneStateSwapped;
         if (changedAlerts) renderRegion(layout::Alerts, state, settings, systemStatus);
-        if (guidanceChanged(state, previous_))
+        if (guidanceChanged(state, previous_) || tripChanged)
             renderRegion(layout::Guidance, state, settings, systemStatus);
         if (streetChanged || laneStateSwapped || marqueeFrameChanged) {
             renderRegion(layout::Street, state, settings, systemStatus);
@@ -1179,8 +1218,15 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
     previous_ = state;
     previousSettings_ = settings;
     previousSystemStatus_ = systemStatus;
+    renderedTrip_ = tripNow;
     renderedClockMinute_ = currentClockMinute;
     renderedClockPhase_ = currentClockPhase;
+    previousOtaActive_ = otaSnap.active;
+    previousOtaProgress_ = otaSnap.progress;
+    previousOtaTimeout_ = otaSnap.timeoutRemaining;
+    previousOtaConfirming_ = confirmSnap.confirming;
+    previousConfirmHold_ = confirmSnap.holdPercent;
+    previousConfirmSeconds_ = confirmSnap.remainingSeconds;
     if (streetRendered) marqueeRenderedOffset_ = marqueeOffset_;
     if (maneuverRendered) nextStreetMarqueeRenderedOffset_ = nextStreetMarqueeOffset_;
     firstFrame_ = false;
@@ -1209,8 +1255,19 @@ void HudRenderer::renderRegion(const Rect &region, const HudState &state,
     Canvas canvas(buffer_, physicalRegion.width, physicalRegion.height,
                   region.width, region.height);
     canvas.setTranslation(settings.offsetX, settings.offsetY);
-    if (systemStatus.visible) renderSystemStatus(canvas, region, systemStatus, settings);
-    else if (!state.connected || !state.hasProducerState) renderStatus(canvas, region, state, settings);
+
+    const auto otaSnap = WifiOtaManager::instance().snapshot();
+    const auto confirmSnap = TouchSensor::instance().confirmStatus();
+
+    if (otaSnap.active) {
+        renderOtaScreen(canvas, region, otaSnap);
+    } else if (confirmSnap.confirming) {
+        renderOtaConfirm(canvas, region, confirmSnap);
+    } else if (systemStatus.visible) {
+        renderSystemStatus(canvas, region, systemStatus, settings);
+    } else if (!state.connected || !state.hasProducerState) {
+        renderStatus(canvas, region, state, settings);
+    }
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
     else if (sameRegion(region, layout::MainCluster)) renderMainCluster(canvas,state,settings);
 #else
@@ -1220,7 +1277,8 @@ void HudRenderer::renderRegion(const Rect &region, const HudState &state,
     else if (sameRegion(region, layout::Alerts)) renderAlerts(canvas,state,settings);
     else if (sameRegion(region, layout::Guidance)) renderGuidance(canvas,state,settings);
     else renderStreet(canvas,state,settings);
-    if (!systemStatus.visible && state.connected && state.hasProducerState) {
+
+    if (!otaSnap.active && !confirmSnap.confirming && !systemStatus.visible && state.connected && state.hasProducerState) {
         renderMainIndicators(canvas, region, systemStatus);
         if (renderedOverspeedPhase_) {
             renderOverspeedBorder(canvas, region);
@@ -1261,6 +1319,107 @@ void HudRenderer::renderMainIndicators(Canvas &canvas, const Rect &region,
         canvas.fontText(160 - region.x, mainY(0) - region.y, percent, assets::kTextSmall,
                         batteryColor, 38, false);
     }
+}
+
+void HudRenderer::renderOtaScreen(Canvas &canvas, const Rect &region,
+                                  const WifiOtaSnapshot &ota) {
+    canvas.clear(colors::Panel);
+
+    // Header Title: centered at y = 8
+    canvas.fontText(0 - region.x, 8 - region.y, "CHẾ ĐỘ CẬP NHẬT WIFI OTA",
+                    assets::kTextMedium, colors::Amber, layout::Width, true);
+
+    // Info card background (x = 16..304, y = 32..124)
+    constexpr int cardX = 16;
+    constexpr int cardY = 32;
+    constexpr int cardW = 288;
+    constexpr int cardH = 92;
+    canvas.fillRect(cardX - region.x, cardY - region.y, cardW, cardH, colors::Background);
+    drawCard(canvas, cardX - region.x, cardY - region.y, cardW, cardH, colors::Muted);
+
+    // WiFi Info rows
+    canvas.fontText(28 - region.x, 42 - region.y, "WiFi: WazeHUD-OTA",
+                    assets::kTextMedium, colors::White, 260, false);
+    canvas.fontText(28 - region.x, 68 - region.y, "Pass: 12345678",
+                    assets::kTextMedium, colors::White, 260, false);
+    canvas.fontText(28 - region.x, 94 - region.y, "Web : http://192.168.4.1",
+                    assets::kTextMedium, colors::Green, 260, false);
+
+    // Status area below card
+    if (ota.status == OtaStatus::WaitingConnection) {
+        canvas.fontText(0 - region.x, 140 - region.y, "Đang chờ kết nối từ điện thoại...",
+                        assets::kTextSmall, colors::White, layout::Width, true);
+        char timeoutText[48];
+        std::snprintf(timeoutText, sizeof(timeoutText), "Tự thoát sau: %u giây", ota.timeoutRemaining);
+        canvas.fontText(0 - region.x, 168 - region.y, timeoutText,
+                        assets::kTextSmall, colors::Muted, layout::Width, true);
+        canvas.fontText(0 - region.x, 205 - region.y, "Mở trình duyệt vào IP trên để nạp file",
+                        assets::kTextSmall, colors::Muted, layout::Width, true);
+    } else if (ota.status == OtaStatus::Writing) {
+        char progText[32];
+        std::snprintf(progText, sizeof(progText), "ĐANG NẠP: %u%%", ota.progress);
+        canvas.fontText(0 - region.x, 138 - region.y, progText,
+                        assets::kTextMedium, colors::White, layout::Width, true);
+
+        // Progress bar (width 260, height 18)
+        constexpr int barX = 30;
+        constexpr int barY = 168;
+        constexpr int barW = 260;
+        constexpr int barH = 18;
+        canvas.fillRect(barX - region.x, barY - region.y, barW, barH, colors::Background);
+        drawCard(canvas, barX - region.x, barY - region.y, barW, barH, colors::Muted);
+        const int fillW = std::clamp((barW - 4) * ota.progress / 100, 0, barW - 4);
+        if (fillW > 0) {
+            canvas.fillRect(barX + 2 - region.x, barY + 2 - region.y, fillW, barH - 4, colors::Green);
+        }
+        canvas.fontText(0 - region.x, 202 - region.y, "Vui lòng không tắt nguồn thiết bị",
+                        assets::kTextSmall, colors::Amber, layout::Width, true);
+    } else if (ota.status == OtaStatus::Success) {
+        canvas.fontText(0 - region.x, 145 - region.y, "CẬP NHẬT THÀNH CÔNG!",
+                        assets::kTextMedium, colors::Green, layout::Width, true);
+        canvas.fontText(0 - region.x, 180 - region.y, "Đang khởi động lại HUD...",
+                        assets::kTextMedium, colors::White, layout::Width, true);
+    } else if (ota.status == OtaStatus::Error) {
+        canvas.fontText(0 - region.x, 145 - region.y, "LỖI CẬP NHẬT!",
+                        assets::kTextMedium, colors::Red, layout::Width, true);
+        canvas.fontText(0 - region.x, 180 - region.y, ota.message,
+                        assets::kTextSmall, colors::White, layout::Width, true);
+    }
+}
+
+void HudRenderer::renderOtaConfirm(Canvas &canvas, const Rect &region,
+                                   const TouchOtaConfirmStatus &confirm) {
+    canvas.clear(colors::Panel);
+
+    // Modal card in the center (x = 20..300, y = 30..210)
+    constexpr int boxX = 20;
+    constexpr int boxY = 30;
+    constexpr int boxW = 280;
+    constexpr int boxH = 180;
+    canvas.fillRect(boxX - region.x, boxY - region.y, boxW, boxH, colors::Background);
+    drawCard(canvas, boxX - region.x, boxY - region.y, boxW, boxH, colors::Amber);
+
+    canvas.fontText(0 - region.x, 45 - region.y, "XÁC NHẬN VÀO WIFI OTA",
+                    assets::kTextMedium, colors::Amber, layout::Width, true);
+    canvas.fontText(0 - region.x, 75 - region.y, "CHẠM GIỮ TIẾP 3 GIÂY",
+                    assets::kTextMedium, colors::White, layout::Width, true);
+
+    // Hold progress bar
+    constexpr int barX = 40;
+    constexpr int barY = 110;
+    constexpr int barW = 240;
+    constexpr int barH = 20;
+    canvas.fillRect(barX - region.x, barY - region.y, barW, barH, colors::Panel);
+    drawCard(canvas, barX - region.x, barY - region.y, barW, barH, colors::Muted);
+    const int fillW = std::clamp((barW - 4) * confirm.holdPercent / 100, 0, barW - 4);
+    if (fillW > 0) {
+        canvas.fillRect(barX + 2 - region.x, barY + 2 - region.y, fillW, barH - 4, colors::Green);
+    }
+
+    char cancelText[48];
+    std::snprintf(cancelText, sizeof(cancelText), "Thả tay để hủy (%u giây)", confirm.remainingSeconds);
+    canvas.fontText(0 - region.x, 150 - region.y, cancelText,
+                    assets::kTextSmall, colors::Muted, layout::Width, true);
 }
 
 void HudRenderer::renderSystemStatus(Canvas &canvas, const Rect &region,
@@ -1444,29 +1603,62 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
 
     // 1. Phía bên trái (x = 0..84): Điều hướng / Chạy tự do
     if (!state.navigationActive || state.maneuver == Maneuver::None) {
-        canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
-        canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
-        canvas.circle(42, 80, 18, colors::Muted, 1);
-        canvas.fillCircle(42, 80, 3, colors::Green);
-        canvas.line(42, 66, 42, 75, colors::Red, 2);
-        canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
-    } else {
-        // Tên đường kế tiếp (trượt từ x = 5 sang bên phải, chui dưới biển báo)
-        if (state.nextStreet[0] != 0) {
-            const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
-            canvas.fontText(5 - offset, 4, state.nextStreet.data(),
-                            assets::kTextMedium, colors::White, -1, false);
+        const int64_t clockMs = localClockMillis(state);
+        if (clockMs != INT64_MIN) {
+            const time_t localSec = static_cast<time_t>(clockMs / 1000LL);
+            struct tm tmVal{};
+            gmtime_r(&localSec, &tmVal);
+
+            static const char *const kDaysOfWeek[] = {
+                "CHỦ NHẬT", "THỨ HAI", "THỨ BA", "THỨ TƯ",
+                "THỨ NĂM", "THỨ SÁU", "THỨ BẢY"
+            };
+            const char *dayStr = (tmVal.tm_wday >= 0 && tmVal.tm_wday <= 6)
+                ? kDaysOfWeek[tmVal.tm_wday] : "";
+
+            char timeStr[16];
+            std::snprintf(timeStr, sizeof(timeStr), "%02d:%02d", tmVal.tm_hour, tmVal.tm_min);
+
+            const int year = std::clamp(tmVal.tm_year + 1900, 2000, 2099);
+            const int month = std::clamp(tmVal.tm_mon + 1, 1, 12);
+            const int mday = std::clamp(tmVal.tm_mday, 1, 31);
+            char dateStr[32];
+            std::snprintf(dateStr, sizeof(dateStr), "%02d/%02d/%04d", mday, month, year);
+
+            canvas.fontText(0, 12, dayStr, assets::kTextSmall, colors::Cyan, 84, true);
+            canvas.fontText(0, 36, timeStr, assets::kTextLarge, colors::White, 84, true);
+            canvas.line(18, 74, 66, 74, colors::Muted, 1);
+            // Full date in metallic gold: bright face over a darker 1 px shadow. The medium
+            // font is 100 px wide; with 1 px tighter spacing it is 90 px, which still clears
+            // the speed sign here (the sign's left edge is x >= 99 at this height).
+            drawTightText(canvas, 1, 89, dateStr, assets::kTextMedium, colors::GoldShadow);
+            drawTightText(canvas, 0, 88, dateStr, assets::kTextMedium, colors::Gold);
+        } else {
+            canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
+            canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
+            canvas.circle(42, 80, 18, colors::Muted, 1);
+            canvas.fillCircle(42, 80, 3, colors::Green);
+            canvas.line(42, 66, 42, 75, colors::Red, 2);
+            canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
         }
+    } else {
         drawManeuverIcon(canvas, state.maneuver, state.roundaboutExit, colors::White);
         char distance[16]; formatDistance(state.maneuverDistanceM, distance, sizeof(distance));
         canvas.fontText(2, 98, distance, assets::kTextMedium, colors::White, 81, true);
     }
 
-    // 2. Phía bên phải (Cụm tốc độ): tâm biển báo tại signX = 155, signY = 62
+    // 2. Phía bên phải (Cụm tốc độ):
+    // Khi đang Dẫn đường và có Tên đường tiếp theo: dùng biển kích thước gọn (radius 48/40, tâm y=72)
+    // để nhường dải đen ở trên cho tên đường tiếp theo.
+    // Khi Chạy Tự do: không có tên đường tiếp theo nên giữ biển to cực đại (radius 60/50, tâm y=62)!
+    const bool isNavigating = state.navigationActive && state.maneuver != Maneuver::None;
+    const bool hasNextStreet = isNavigating && state.nextStreet[0] != 0;
+
     constexpr int signX = 155;
-    constexpr int signY = 62;
-    constexpr int outerRadius = 60;
-    constexpr int innerRadius = 50;
+    const int signY = hasNextStreet ? 72 : 62;
+    const int outerRadius = hasNextStreet ? 48 : 60;
+    const int innerRadius = hasNextStreet ? 40 : 50;
+
     constexpr int badgeW = 38;
     constexpr int badgeH = 28;
     constexpr int badgeX = 225 - badgeW - 2; // 185
@@ -1491,7 +1683,7 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
     const uint16_t signBgColor = isNight ? colors::Panel : colors::White;
     const uint16_t signTextColor = isNight ? colors::White : colors::Black;
 
-    // Biển giới hạn tốc độ: vẽ đè lên phần đuôi tên đường tiếp theo, tạo hiệu ứng trượt lọt tự nhiên
+    // Biển giới hạn tốc độ
     canvas.fillCircle(signX, signY, outerRadius, colors::Red);
     canvas.fillCircle(signX, signY, innerRadius, signBgColor);
 
@@ -1519,6 +1711,15 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
     const auto &speedFont = (state.speedKmh >= 100) ? assets::kNumberSmall : assets::kNumberMedium;
     canvas.fontText(badgeX, badgeY + (badgeH - speedFont.lineHeight) / 2,
                     speed, speedFont, speedColor, badgeW, true);
+
+    // 3. Banner tên đường tiếp theo: Nổi trên đỉnh biển báo với nền đen chữ trắng (chỉ khi có tên đường)
+    if (hasNextStreet) {
+        constexpr int bannerH = 26;
+        canvas.fillRect(0, 0, canvas.width(), bannerH, colors::Panel);
+        const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
+        canvas.fontText(5 - offset, 2, state.nextStreet.data(),
+                        assets::kTextMedium, colors::White, -1, false);
+    }
 }
 #endif
 
@@ -1527,17 +1728,46 @@ void HudRenderer::renderManeuver(Canvas &canvas, const HudState &state, const De
     const uint16_t fg = colors::White;
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
     if (!state.navigationActive || state.maneuver == Maneuver::None) {
-        canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
-        canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
-        canvas.circle(42, 80, 18, colors::Muted, 1);
-        canvas.fillCircle(42, 80, 3, colors::Green);
-        canvas.line(42, 66, 42, 75, colors::Red, 2);
-        canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
+        const int64_t clockMs = localClockMillis(state);
+        if (clockMs != INT64_MIN) {
+            const time_t localSec = static_cast<time_t>(clockMs / 1000LL);
+            struct tm tmVal{};
+            gmtime_r(&localSec, &tmVal);
+
+            static const char *const kDaysOfWeek[] = {
+                "CHỦ NHẬT", "THỨ HAI", "THỨ BA", "THỨ TƯ",
+                "THỨ NĂM", "THỨ SÁU", "THỨ BẢY"
+            };
+            const char *dayStr = (tmVal.tm_wday >= 0 && tmVal.tm_wday <= 6)
+                ? kDaysOfWeek[tmVal.tm_wday] : "";
+
+            char timeStr[16];
+            std::snprintf(timeStr, sizeof(timeStr), "%02d:%02d", tmVal.tm_hour, tmVal.tm_min);
+
+            const int year = std::clamp(tmVal.tm_year + 1900, 2000, 2099);
+            const int month = std::clamp(tmVal.tm_mon + 1, 1, 12);
+            const int mday = std::clamp(tmVal.tm_mday, 1, 31);
+            char dateStr[32];
+            std::snprintf(dateStr, sizeof(dateStr), "%02d/%02d/%04d", mday, month, year);
+
+            canvas.fontText(0, 12, dayStr, assets::kTextSmall, colors::Cyan, 84, true);
+            canvas.fontText(0, 36, timeStr, assets::kTextLarge, colors::White, 84, true);
+            canvas.line(18, 74, 66, 74, colors::Muted, 1);
+            canvas.fontText(0, 84, dateStr, assets::kTextSmall, colors::White, 84, true);
+            canvas.fontText(0, 108, "TỰ DO", assets::kTextSmall, colors::Green, 84, true);
+        } else {
+            canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
+            canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
+            canvas.circle(42, 80, 18, colors::Muted, 1);
+            canvas.fillCircle(42, 80, 3, colors::Green);
+            canvas.line(42, 66, 42, 75, colors::Red, 2);
+            canvas.fontText(4, 106, "CRUISE", assets::kTextSmall, colors::Muted, 77, true);
+        }
         return;
     }
     if (state.nextStreet[0] != 0) {
         const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
-        canvas.fontText(5 - offset, 4, state.nextStreet.data(),
+        canvas.fontText(5 - offset, 3, state.nextStreet.data(),
                         assets::kTextMedium, colors::White, -1, false);
     }
     drawManeuverIcon(canvas, state.maneuver, state.roundaboutExit, fg);
@@ -1594,16 +1824,6 @@ void HudRenderer::renderSpeedCluster(Canvas &canvas, const HudState &state,
     const uint16_t signBgColor = isNight ? colors::Panel : colors::White;
     const uint16_t signTextColor = isNight ? colors::White : colors::Black;
 
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
-    if (state.navigationActive && state.maneuver != Maneuver::None && state.nextStreet[0] != 0) {
-        const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
-        canvas.fontText(5 - layout::Maneuver.width - offset, 4, state.nextStreet.data(),
-                        assets::kTextMedium, colors::White, -1, false);
-        canvas.fillRect(signX - 33, 0, canvas.width() - (signX - 33), 30, colors::Panel);
-        canvas.fillCircle(signX, signY, outerRadius + 2, colors::Panel);
-    }
-#endif
-
     canvas.fillCircle(signX, signY, outerRadius, colors::Red);
     canvas.fillCircle(signX, signY, innerRadius, signBgColor);
 
@@ -1633,6 +1853,16 @@ void HudRenderer::renderSpeedCluster(Canvas &canvas, const HudState &state,
     const auto &speedFont = (state.speedKmh >= 100) ? assets::kNumberSmall : assets::kNumberMedium;
     canvas.fontText(badgeX, badgeY + (badgeH - speedFont.lineHeight) / 2,
                     speed, speedFont, speedColor, badgeW, true);
+
+#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
+    if (state.navigationActive && state.maneuver != Maneuver::None && state.nextStreet[0] != 0) {
+        constexpr int bannerH = 28;
+        canvas.fillRect(0, 0, canvas.width(), bannerH, colors::Panel);
+        const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
+        canvas.fontText(5 - layout::Maneuver.width - offset, 3, state.nextStreet.data(),
+                        assets::kTextMedium, colors::White, -1, false);
+    }
+#endif
 }
 
 void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const DeviceSettings &settings) {
@@ -1640,7 +1870,7 @@ void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const Devi
 
     const int64_t millis = localClockMillis(state);
     const int64_t second = millis == INT64_MIN ? INT64_MIN : millis / 1000LL;
-    if (second != INT64_MIN) {
+    if (state.navigationActive && second != INT64_MIN) {
         const int64_t minute = second / 60;
         const int normalizedMinute = static_cast<int>((minute % 1440 + 1440) % 1440);
         char clock[8];
@@ -1916,10 +2146,39 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
                 }
             }
         } else {
-            drawCard(canvas, 16, 12, 288, 58, colors::Muted);
-            canvas.fillCircle(45, 41, 14, colors::Green);
-            canvas.fontText(72, 22, "LỘ TRÌNH AN TOÀN", assets::kTextMedium, colors::Green, 220, false);
-            canvas.fontText(72, 44, "Không có cảnh báo phía trước", assets::kTextSmall, colors::Muted, 220, false);
+            // Trip card (free drive / nothing else to show): distance, time, max and average speed.
+            const TripDisplay trip = trip_.display();
+            char distance[16];
+            if (trip.distanceTenthsKm < 1000)
+                std::snprintf(distance, sizeof(distance), "%d.%d", trip.distanceTenthsKm / 10,
+                              trip.distanceTenthsKm % 10);
+            else
+                std::snprintf(distance, sizeof(distance), "%d", trip.distanceTenthsKm / 10);
+            char duration[16];
+            const char *durationUnit = "";
+            if (trip.minutes < 60) {
+                std::snprintf(duration, sizeof(duration), "%d", trip.minutes);
+                durationUnit = "ph";
+            } else {
+                std::snprintf(duration, sizeof(duration), "%dh%02d", trip.minutes / 60,
+                              trip.minutes % 60);
+            }
+            char maxSpeed[8], avgSpeed[8];
+            std::snprintf(maxSpeed, sizeof(maxSpeed), "%d", trip.maxKmh);
+            std::snprintf(avgSpeed, sizeof(avgSpeed), "%d", trip.avgKmh);
+
+            constexpr int kColumnWidths[] = {68, 76, 76, 88};  // inside the 6 px card padding
+            drawCard(canvas, 4, 8, 312, 66, colors::Muted);
+            int columnX = 6;
+            const char *const labels[] = {"ĐÃ ĐI", "THỜI GIAN", "CAO NHẤT", "TRUNG BÌNH"};
+            const char *const values[] = {distance, duration, maxSpeed, avgSpeed};
+            const char *const units[] = {"km", durationUnit, "km/h", "km/h"};
+            for (int column = 0; column < 4; ++column) {
+                if (column > 0) canvas.fillRect(columnX, 16, 1, 50, colors::Muted);
+                drawTripStat(canvas, columnX, kColumnWidths[column], labels[column], values[column],
+                             units[column]);
+                columnX += kColumnWidths[column];
+            }
         }
     }
 }

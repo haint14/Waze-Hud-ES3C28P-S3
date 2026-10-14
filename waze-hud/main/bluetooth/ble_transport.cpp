@@ -221,4 +221,13 @@ bool BleTransport::readRssi(int8_t &rssiDbm) const {
     return true;
 }
 
+void BleTransport::stop() {
+    const uint16_t handle = connection.load();
+    if (handle != BLE_HS_CONN_HANDLE_NONE) {
+        ble_gap_terminate(handle, BLE_ERR_REM_USER_CONN_TERM);
+    }
+    ble_gap_adv_stop();
+    ESP_LOGI(kTag, "BLE advertising and connection stopped for OTA mode");
+}
+
 }  // namespace waze_hud
