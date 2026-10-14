@@ -6,6 +6,11 @@ Dự án WazeHUD tối ưu cho màn hình ESP32-2432S028 (CYD 2.8 inch). Toàn b
 
 ## [Build 16 (v2.8.16-b16)] - 2026-10-14
 
+> [!NOTE]
+> **Lời Cảm Ơn Tác Giả Gốc & Tuyên Bố Dự Án:**
+> - Bản phát triển WazeHUD trên repository này là phiên bản cá nhân hóa, được xây dựng và tối ưu mở rộng hoàn toàn dựa trên sự hỗ trợ của **AI (Google Gemini / Antigravity)** với mục đích chính là phục vụ nhu cầu sử dụng thực tế trên xe của cá nhân mình và chia sẻ mã nguồn mở cho cộng đồng cùng tham khảo.
+> - Xin trân trọng gửi lời cảm ơn chân thành và sâu sắc nhất tới **Tác giả gốc [ShindouAris (WazeHUD)](https://github.com/ShindouAris/WazeHUD)** cùng cộng đồng **[WazeMod Vietnam](https://wazemod.io.vn)** đã tạo nên nền tảng phần mềm tuyệt vời này!
+
 > Bản phát hành B16 đánh dấu bước tiến lớn với tính năng **Cập nhật Không dây WiFi Web OTA qua màn hình cảm ứng**, làm mới toàn diện **Giao diện Chế độ Chạy Tự Do (Free Drive)** với bộ Lịch vạn niên & Đồng hồ to 30px, **Biển giới hạn tốc độ thích ứng thông minh** (to khi chạy tự do, gọn gàng khi dẫn đường), **Dải tên đường tiếp theo nổi bật trên nền đen** mở rộng gấp đôi chiều rộng hiển thị (215px), và chuẩn hóa toàn bộ file firmware vào thư mục `releases/release_b16/` với quy chuẩn đặt tên timestamp ngày_giờ.
 
 ### 📦 Danh mục Firmware Phát hành B16
