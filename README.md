@@ -6,16 +6,48 @@
 
 ---
 
-## 📥 Tải Firmware (Download)
+## 🚀 Cập Nhật Firmware Nhanh Bằng Điện Thoại (Từ Build 16 Trở Đi)
+
+Từ phiên bản **Build 16 (B16)** trở đi, WazeHUD hỗ trợ tính năng **Cập nhật Không dây WiFi Web OTA qua màn hình cảm ứng**. Bạn có thể nâng cấp firmware trực tiếp từ điện thoại (iPhone, Android) ngay trên xe chỉ trong 1 phút mà **không cần tháo thiết bị hay cắm cáp vào máy tính**!
+
+> [!IMPORTANT]
+> **LƯU Ý ĐẶC BIỆT KHI LÊN BẢN B16 LẦN ĐẦU TIÊN:**
+> - Nếu thiết bị của bạn đang ở các phiên bản cũ (**Build 15 trở về trước**), thiết bị chưa có phân vùng OTA và chưa có tính năng phát WiFi.
+> - **Lần đầu tiên nâng cấp lên Build 16 bắt buộc phải nạp bằng cáp USB qua máy tính** (dùng file `CYD2.8-BLE-xxx-b16_full.bin` nạp tại offset `0x0` qua Web Flasher hoặc esptool theo hướng dẫn bên dưới).
+> - Kể từ khi thiết bị đã chạy Build 16, tất cả các bản cập nhật trong tương lai (B17, B18...) bạn chỉ cần tải file `..._app.bin` và nạp không dây qua điện thoại!
+
+### 📱 Các Bước Nâng Cấp Qua Điện Thoại (WiFi Web OTA)
+1. **Tải firmware OTA về điện thoại:**
+   - Truy cập **[GitHub Releases Mới Nhất](https://github.com/quangdo92/waze-hud/releases/latest)** bằng trình duyệt trên điện thoại.
+   - Tải file có đuôi **`_app.bin`** (ví dụ: `CYD2.8-BLE-141026-b16_app.bin`).
+2. **Kích hoạt chế độ OTA trên HUD:**
+   - Dùng ngón tay **chạm giữ màn hình HUD trong 3 giây** (hoặc nhấn giữ nút **BOOT** sau lưng 3 giây).
+   - Màn hình sẽ hiện hộp thoại xác nhận đếm ngược 6 giây kèm thanh tiến trình.
+   - **Chạm giữ tiếp màn hình trong 3 giây** để xác nhận vào chế độ WiFi OTA.
+3. **Kết nối WiFi từ điện thoại:**
+   - Mở cài đặt WiFi trên điện thoại, tìm và kết nối vào mạng: **`WazeHUD-OTA`**
+   - Mật khẩu WiFi: **`12345678`**
+4. **Nạp Firmware:**
+   - Mở trình duyệt web (Safari, Chrome...), truy cập địa chỉ: **`http://192.168.4.1`**
+   - Bấm **Choose File** (Chọn tệp) và chọn file **`..._app.bin`** vừa tải ở Bước 1.
+   - Bấm **Bắt đầu Cập nhật (Upload & Flash)**.
+   - Tiến trình nạp % hiển thị đồng thời trên cả điện thoại và HUD. Khi đạt 100%, thiết bị sẽ tự khởi động lại vào phiên bản mới.
+
+---
+
+## 📥 Tải Firmware & Nạp Qua Cáp Máy Tính (Dành cho Lần đầu lên B16 hoặc Cứu máy)
 
 👉 **Truy cập trang phát hành chính thức:** **[GitHub Releases - WazeHUD](https://github.com/quangdo92/waze-hud/releases/latest)**
 
-Tại trang Releases, chọn tải file `.bin` All-in-One phù hợp với phiên bản mạch phần cứng của bạn:
+Tại trang Releases, chọn tải file `.bin` phù hợp với nhu cầu:
+- **`CYD2.8-BLE-xxx_app.bin`**: Dành cho nạp không dây qua WiFi Web OTA trên điện thoại (như hướng dẫn ở trên).
+- **`CYD2.8-BLE-xxx_full.bin`**: Bản Bluetooth BLE nạp Full Flash (offset `0x0`) qua cáp USB trên máy tính (dành cho lần đầu lên B16 hoặc khi cần nạp mới hoàn toàn).
+- **`CYD2.8-USB-xxx.bin`**: Bản cắm cáp USB Serial 115200 (offset `0x0`) cho mạch CYD 2.8".
 
-### 🌐 Cách 1: Nạp trực tiếp qua Web Flasher (Khuyên dùng - Cực dễ cho mọi người)
-Bạn có thể sử dụng công cụ Web Flasher của tác giả WazeMod trực tiếp trên trình duyệt web (Chrome, Edge, Cốc Cốc trên máy tính hoặc điện thoại Android) mà không cần cài đặt Python hay bất kỳ phần mềm nào:
+### 🌐 Cách 1: Nạp trực tiếp qua Web Flasher (Khuyên dùng khi nạp cáp máy tính)
+Bạn có thể sử dụng công cụ Web Flasher của tác giả WazeMod trực tiếp trên trình duyệt web (Chrome, Edge, Cốc Cốc trên máy tính hoặc điện thoại Android hỗ trợ OTG) mà không cần cài đặt Python hay bất kỳ phần mềm nào:
 
-1. Bấm nút **📥 Tải về** ở bảng trên để tải file `.bin` phù hợp về máy.
+1. Tải file `..._full.bin` hoặc file USB Serial phù hợp về máy.
 2. Cắm cáp kết nối mạch CYD với máy tính qua cổng USB.
 3. Truy cập công cụ web flasher của tác giả: 👉 **[https://wazemod.io.vn/flash-firmware](https://wazemod.io.vn/flash-firmware)**
 4. Bấm **Kết nối**, chọn đúng cổng COM của mạch ESP32 CYD.
