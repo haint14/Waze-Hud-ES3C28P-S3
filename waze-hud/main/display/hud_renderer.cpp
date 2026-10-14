@@ -1079,9 +1079,18 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
     const bool systemStatusClosed = previousSystemStatus_.visible;
     bool streetRendered = false;
     bool maneuverRendered = false;
+    const auto otaSnap = WifiOtaManager::instance().snapshot();
+    const auto confirmSnap = TouchSensor::instance().confirmStatus();
+    const bool otaChanged = otaSnap.active != previousOtaActive_ ||
+                            otaSnap.progress != previousOtaProgress_ ||
+                            otaSnap.timeoutRemaining != previousOtaTimeout_;
+    const bool confirmChanged = confirmSnap.confirming != previousOtaConfirming_ ||
+                                confirmSnap.holdPercent != previousConfirmHold_ ||
+                                confirmSnap.remainingSeconds != previousConfirmSeconds_;
+
     const bool triggerFullRedraw = systemStatusClosed || statusChanged || configChanged ||
                                    !state.connected || !state.hasProducerState ||
-                                   overspeedPhaseChanged;
+                                   overspeedPhaseChanged || otaChanged || confirmChanged;
     if (triggerFullRedraw) {
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
         renderRegion(layout::MainCluster, state, settings, systemStatus);
@@ -1145,6 +1154,12 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
     previousSystemStatus_ = systemStatus;
     renderedClockMinute_ = currentClockMinute;
     renderedClockPhase_ = currentClockPhase;
+    previousOtaActive_ = otaSnap.active;
+    previousOtaProgress_ = otaSnap.progress;
+    previousOtaTimeout_ = otaSnap.timeoutRemaining;
+    previousOtaConfirming_ = confirmSnap.confirming;
+    previousConfirmHold_ = confirmSnap.holdPercent;
+    previousConfirmSeconds_ = confirmSnap.remainingSeconds;
     if (streetRendered) marqueeRenderedOffset_ = marqueeOffset_;
     if (maneuverRendered) nextStreetMarqueeRenderedOffset_ = nextStreetMarqueeOffset_;
     firstFrame_ = false;
@@ -1173,8 +1188,19 @@ void HudRenderer::renderRegion(const Rect &region, const HudState &state,
     Canvas canvas(buffer_, physicalRegion.width, physicalRegion.height,
                   region.width, region.height);
     canvas.setTranslation(settings.offsetX, settings.offsetY);
-    if (systemStatus.visible) renderSystemStatus(canvas, region, systemStatus, settings);
-    else if (!state.connected || !state.hasProducerState) renderStatus(canvas, region, state, settings);
+
+    const auto otaSnap = WifiOtaManager::instance().snapshot();
+    const auto confirmSnap = TouchSensor::instance().confirmStatus();
+
+    if (otaSnap.active) {
+        renderOtaScreen(canvas, region, otaSnap);
+    } else if (confirmSnap.confirming) {
+        renderOtaConfirm(canvas, region, confirmSnap);
+    } else if (systemStatus.visible) {
+        renderSystemStatus(canvas, region, systemStatus, settings);
+    } else if (!state.connected || !state.hasProducerState) {
+        renderStatus(canvas, region, state, settings);
+    }
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
     else if (sameRegion(region, layout::MainCluster)) renderMainCluster(canvas,state,settings);
 #else
@@ -1184,7 +1210,8 @@ void HudRenderer::renderRegion(const Rect &region, const HudState &state,
     else if (sameRegion(region, layout::Alerts)) renderAlerts(canvas,state,settings);
     else if (sameRegion(region, layout::Guidance)) renderGuidance(canvas,state,settings);
     else renderStreet(canvas,state,settings);
-    if (!systemStatus.visible && state.connected && state.hasProducerState) {
+
+    if (!otaSnap.active && !confirmSnap.confirming && !systemStatus.visible && state.connected && state.hasProducerState) {
         renderMainIndicators(canvas, region, systemStatus);
         if (renderedOverspeedPhase_) {
             renderOverspeedBorder(canvas, region);
@@ -1225,6 +1252,107 @@ void HudRenderer::renderMainIndicators(Canvas &canvas, const Rect &region,
         canvas.fontText(160 - region.x, mainY(0) - region.y, percent, assets::kTextSmall,
                         batteryColor, 38, false);
     }
+}
+
+void HudRenderer::renderOtaScreen(Canvas &canvas, const Rect &region,
+                                  const WifiOtaSnapshot &ota) {
+    canvas.clear(colors::Panel);
+
+    // Header Title: centered at y = 8
+    canvas.fontText(0 - region.x, 8 - region.y, "CHẾ ĐỘ CẬP NHẬT WIFI OTA",
+                    assets::kTextMedium, colors::Amber, layout::Width, true);
+
+    // Info card background (x = 16..304, y = 32..124)
+    constexpr int cardX = 16;
+    constexpr int cardY = 32;
+    constexpr int cardW = 288;
+    constexpr int cardH = 92;
+    canvas.fillRect(cardX - region.x, cardY - region.y, cardW, cardH, colors::Background);
+    drawCard(canvas, cardX - region.x, cardY - region.y, cardW, cardH, colors::Muted);
+
+    // WiFi Info rows
+    canvas.fontText(28 - region.x, 42 - region.y, "WiFi: WazeHUD-OTA",
+                    assets::kTextMedium, colors::White, 260, false);
+    canvas.fontText(28 - region.x, 68 - region.y, "Pass: 12345678",
+                    assets::kTextMedium, colors::White, 260, false);
+    canvas.fontText(28 - region.x, 94 - region.y, "Web : http://192.168.4.1",
+                    assets::kTextMedium, colors::Green, 260, false);
+
+    // Status area below card
+    if (ota.status == OtaStatus::WaitingConnection) {
+        canvas.fontText(0 - region.x, 140 - region.y, "Đang chờ kết nối từ điện thoại...",
+                        assets::kTextSmall, colors::White, layout::Width, true);
+        char timeoutText[48];
+        std::snprintf(timeoutText, sizeof(timeoutText), "Tự thoát sau: %u giây", ota.timeoutRemaining);
+        canvas.fontText(0 - region.x, 168 - region.y, timeoutText,
+                        assets::kTextSmall, colors::Muted, layout::Width, true);
+        canvas.fontText(0 - region.x, 205 - region.y, "Mở trình duyệt vào IP trên để nạp file",
+                        assets::kTextSmall, colors::Muted, layout::Width, true);
+    } else if (ota.status == OtaStatus::Writing) {
+        char progText[32];
+        std::snprintf(progText, sizeof(progText), "ĐANG NẠP: %u%%", ota.progress);
+        canvas.fontText(0 - region.x, 138 - region.y, progText,
+                        assets::kTextMedium, colors::White, layout::Width, true);
+
+        // Progress bar (width 260, height 18)
+        constexpr int barX = 30;
+        constexpr int barY = 168;
+        constexpr int barW = 260;
+        constexpr int barH = 18;
+        canvas.fillRect(barX - region.x, barY - region.y, barW, barH, colors::Background);
+        drawCard(canvas, barX - region.x, barY - region.y, barW, barH, colors::Muted);
+        const int fillW = std::clamp((barW - 4) * ota.progress / 100, 0, barW - 4);
+        if (fillW > 0) {
+            canvas.fillRect(barX + 2 - region.x, barY + 2 - region.y, fillW, barH - 4, colors::Green);
+        }
+        canvas.fontText(0 - region.x, 202 - region.y, "Vui lòng không tắt nguồn thiết bị",
+                        assets::kTextSmall, colors::Amber, layout::Width, true);
+    } else if (ota.status == OtaStatus::Success) {
+        canvas.fontText(0 - region.x, 145 - region.y, "CẬP NHẬT THÀNH CÔNG!",
+                        assets::kTextMedium, colors::Green, layout::Width, true);
+        canvas.fontText(0 - region.x, 180 - region.y, "Đang khởi động lại HUD...",
+                        assets::kTextMedium, colors::White, layout::Width, true);
+    } else if (ota.status == OtaStatus::Error) {
+        canvas.fontText(0 - region.x, 145 - region.y, "LỖI CẬP NHẬT!",
+                        assets::kTextMedium, colors::Red, layout::Width, true);
+        canvas.fontText(0 - region.x, 180 - region.y, ota.message,
+                        assets::kTextSmall, colors::White, layout::Width, true);
+    }
+}
+
+void HudRenderer::renderOtaConfirm(Canvas &canvas, const Rect &region,
+                                   const TouchOtaConfirmStatus &confirm) {
+    canvas.clear(colors::Panel);
+
+    // Modal card in the center (x = 20..300, y = 30..210)
+    constexpr int boxX = 20;
+    constexpr int boxY = 30;
+    constexpr int boxW = 280;
+    constexpr int boxH = 180;
+    canvas.fillRect(boxX - region.x, boxY - region.y, boxW, boxH, colors::Background);
+    drawCard(canvas, boxX - region.x, boxY - region.y, boxW, boxH, colors::Amber);
+
+    canvas.fontText(0 - region.x, 45 - region.y, "XÁC NHẬN VÀO WIFI OTA",
+                    assets::kTextMedium, colors::Amber, layout::Width, true);
+    canvas.fontText(0 - region.x, 75 - region.y, "CHẠM GIỮ TIẾP 3 GIÂY",
+                    assets::kTextMedium, colors::White, layout::Width, true);
+
+    // Hold progress bar
+    constexpr int barX = 40;
+    constexpr int barY = 110;
+    constexpr int barW = 240;
+    constexpr int barH = 20;
+    canvas.fillRect(barX - region.x, barY - region.y, barW, barH, colors::Panel);
+    drawCard(canvas, barX - region.x, barY - region.y, barW, barH, colors::Muted);
+    const int fillW = std::clamp((barW - 4) * confirm.holdPercent / 100, 0, barW - 4);
+    if (fillW > 0) {
+        canvas.fillRect(barX + 2 - region.x, barY + 2 - region.y, fillW, barH - 4, colors::Green);
+    }
+
+    char cancelText[48];
+    std::snprintf(cancelText, sizeof(cancelText), "Thả tay để hủy (%u giây)", confirm.remainingSeconds);
+    canvas.fontText(0 - region.x, 150 - region.y, cancelText,
+                    assets::kTextSmall, colors::Muted, layout::Width, true);
 }
 
 void HudRenderer::renderSystemStatus(Canvas &canvas, const Rect &region,

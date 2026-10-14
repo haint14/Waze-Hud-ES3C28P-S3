@@ -12,8 +12,10 @@ idf_component_register(
         "assets/generated_assets.cpp"
         "config/device_config.cpp"
         "system/system_status.cpp"
+        "ota/wifi_ota_manager.cpp"
+        "touch/touch_sensor.cpp"
     INCLUDE_DIRS "."
-    REQUIRES bt esp_adc esp_lcd esp_driver_gpio esp_driver_ledc esp_driver_spi esp_hw_support nvs_flash json
+    REQUIRES bt esp_adc esp_lcd esp_driver_gpio esp_driver_ledc esp_driver_spi esp_hw_support nvs_flash json esp_wifi esp_http_server esp_netif app_update
 )
 
 target_compile_options(${COMPONENT_LIB} PRIVATE

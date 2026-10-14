@@ -16,6 +16,8 @@
 #include "sdkconfig.h"
 #include "state/hud_state_store.h"
 #include "system/system_status.h"
+#include "touch/touch_sensor.h"
+#include "ota/wifi_ota_manager.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -356,6 +358,7 @@ extern "C" void app_main() {
 #endif
 
     ESP_ERROR_CHECK(startOrientationButton());
+    ESP_ERROR_CHECK(TouchSensor::instance().init());
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
     ESP_ERROR_CHECK(startOverspeedLed());
 #endif

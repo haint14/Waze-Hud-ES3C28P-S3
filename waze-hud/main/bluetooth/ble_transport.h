@@ -24,6 +24,7 @@ public:
     esp_err_t sendLine(const char *line);
     bool connected() const;
     bool readRssi(int8_t &rssiDbm) const;
+    void stop();
 };
 
 }  // namespace waze_hud
