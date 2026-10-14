@@ -52,7 +52,7 @@ esp_err_t TouchSensor::init() {
     ESP_RETURN_ON_ERROR(gpio_config(&irqCfg), kTag, "Touch IRQ pin setup failed");
 #endif
 
-    const BaseType_t created = xTaskCreate(taskEntry, "hud_touch", 2560,
+    const BaseType_t created = xTaskCreate(taskEntry, "hud_touch", 3072,
                                            this, 2, nullptr);
     return created == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
 }
@@ -157,8 +157,12 @@ void TouchSensor::runLoop() {
                         status_.holdPercent = 100;
                         HudStateStore::instance().refresh();
 
-                        WifiOtaManager::instance().start();
+                        xTaskCreate([](void *) {
+                            WifiOtaManager::instance().start();
+                            vTaskDelete(nullptr);
+                        }, "ota_starter", 4096, nullptr, 5, nullptr);
 
+                        vTaskDelay(pdMS_TO_TICKS(150));
                         // Trong khi OTA chạy, tạm dừng vòng lặp touch
                         while (WifiOtaManager::instance().isActive()) {
                             vTaskDelay(pdMS_TO_TICKS(500));

@@ -48,6 +48,7 @@ private:
     uint16_t timeout_{180};
     char message_[64]{0};
     void *httpd_{nullptr};
+    void *apNetif_{nullptr};
 };
 
 }  // namespace waze_hud

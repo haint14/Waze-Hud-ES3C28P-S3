@@ -4,8 +4,10 @@
 #include "display/hud_renderer.h"
 #include "driver/gpio.h"
 #include "esp_check.h"
+#include "esp_event.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_netif.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -343,6 +345,8 @@ extern "C" void app_main() {
     }
     ESP_ERROR_CHECK(result);
     recordBootReason();
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
     ESP_ERROR_CHECK(DeviceConfig::instance().init());
     ESP_ERROR_CHECK(HudStateStore::instance().init() ? ESP_OK : ESP_ERR_NO_MEM);
     const esp_err_t statusResult = SystemStatus::instance().init();

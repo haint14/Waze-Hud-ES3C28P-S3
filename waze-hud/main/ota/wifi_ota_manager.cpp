@@ -295,11 +295,16 @@ void WifiOtaManager::tickSecond() {
 }
 
 void WifiOtaManager::startAp() {
-    esp_netif_init();
-    esp_netif_create_default_wifi_ap();
+    if (!apNetif_) {
+        apNetif_ = esp_netif_create_default_wifi_ap();
+    }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
+    esp_err_t err = esp_wifi_init(&cfg);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(kTag, "esp_wifi_init failed: %s", esp_err_to_name(err));
+        return;
+    }
 
     wifi_config_t wifiConfig{};
     constexpr char kSsid[] = "WazeHUD-OTA";
@@ -312,7 +317,11 @@ void WifiOtaManager::startAp() {
 
     esp_wifi_set_mode(WIFI_MODE_AP);
     esp_wifi_set_config(WIFI_IF_AP, &wifiConfig);
-    esp_wifi_start();
+    err = esp_wifi_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(kTag, "esp_wifi_start failed: %s", esp_err_to_name(err));
+        return;
+    }
     ESP_LOGI(kTag, "WiFi AP started. SSID: %s, Pass: %s", kSsid, kPass);
 }
 
@@ -323,7 +332,7 @@ void WifiOtaManager::stopAp() {
 
 void WifiOtaManager::startHttpServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;
+    config.stack_size = 4096;
     config.max_uri_handlers = 8;
 
     httpd_handle_t server = nullptr;
