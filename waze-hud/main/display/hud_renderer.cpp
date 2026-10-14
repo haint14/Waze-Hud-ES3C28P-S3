@@ -961,9 +961,19 @@ bool tripCardVisible(const HudState &state) {
              (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F));
 }
 
+// Bottom of the digit glyphs inside a font's line box, i.e. where the text baseline sits.
+// Line-box heights differ between fonts (diacritics), so units must be aligned on this.
+int digitBaseline(const assets::BitmapFont &font) {
+    for (std::size_t index = 0; index < font.glyphCount; ++index) {
+        const assets::FontGlyph &glyph = font.glyphs[index];
+        if (glyph.codepoint == static_cast<uint32_t>('0')) return glyph.yOffset + glyph.height;
+    }
+    return font.lineHeight;
+}
+
 // One column of the trip card: small label above a medium value with a small unit.
 void drawTripStat(Canvas &canvas, int x, int width, const char *label, const char *value,
-                  const char *unit) {
+                  const char *unit, uint16_t valueColor) {
     constexpr int kLabelY = 15;
     constexpr int kValueY = 38;
     constexpr int kUnitGap = 3;
@@ -971,11 +981,42 @@ void drawTripStat(Canvas &canvas, int x, int width, const char *label, const cha
     const int valueWidth = canvas.fontTextWidth(value, assets::kTextMedium);
     const int unitWidth = unit[0] ? canvas.fontTextWidth(unit, assets::kTextSmall) + kUnitGap : 0;
     const int startX = x + (width - (valueWidth + unitWidth)) / 2;
-    canvas.fontText(startX, kValueY, value, assets::kTextMedium, colors::White, -1, false);
+    canvas.fontText(startX, kValueY, value, assets::kTextMedium, valueColor, -1, false);
     if (unit[0])
         canvas.fontText(startX + valueWidth + kUnitGap,
-                        kValueY + assets::kTextMedium.lineHeight - assets::kTextSmall.lineHeight,
+                        kValueY + digitBaseline(assets::kTextMedium) - digitBaseline(assets::kTextSmall),
                         unit, assets::kTextSmall, colors::Muted, -1, false);
+}
+
+// No alert ahead: show how far the vehicle is below/above the speed limit in the alert column,
+// e.g. "DƯỚI / GIỚI HẠN / 4 km/h". Green below, yellow at the limit, red above.
+bool alertColumnIdle(const HudState &state) {
+    AlertState alerts[8];
+    return collectSortedAlerts(state, alerts, 8) == 0;
+}
+
+void drawSpeedMargin(Canvas &canvas, const HudState &state) {
+    if (state.speedLimitKmh <= 0) return;  // limit unknown: nothing meaningful to compare
+    const int difference = state.speedKmh - state.speedLimitKmh;
+    const char *word = difference < 0 ? "DƯỚI" : difference > 0 ? "VƯỢT" : "BẰNG";
+    const uint16_t color = difference < 0 ? colors::Green
+                         : difference > 0 ? colors::Red : colors::Yellow;
+    char number[16];
+    std::snprintf(number, sizeof(number), "%d", std::abs(difference));
+
+    constexpr int kUnitGap = 3;
+    const int width = canvas.width();
+    drawCard(canvas, 2, 30, width - 4, 84, colors::Muted);
+    canvas.fontText(0, 38, word, assets::kTextMedium, color, width, true);
+    canvas.fontText(0, 62, "GIỚI HẠN", assets::kTextSmall, colors::Muted, width, true);
+    const int numberWidth = canvas.fontTextWidth(number, assets::kTextLarge);
+    const int unitWidth = canvas.fontTextWidth("km/h", assets::kTextSmall) + kUnitGap;
+    const int startX = (width - (numberWidth + unitWidth)) / 2;
+    constexpr int kNumberY = 80;
+    canvas.fontText(startX, kNumberY, number, assets::kTextLarge, color, -1, false);
+    canvas.fontText(startX + numberWidth + kUnitGap,
+                    kNumberY + digitBaseline(assets::kTextLarge) - digitBaseline(assets::kTextSmall),
+                    "km/h", assets::kTextSmall, colors::Muted, -1, false);
 }
 }  // namespace
 
@@ -1198,9 +1239,12 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
             renderRegion(layout::SpeedCluster, state, settings, systemStatus);
 #endif
         const bool laneStateSwapped = (state.laneCount > 0) != (previous_.laneCount > 0);
+        const bool speedMarginChanged =
+            (state.speedKmh != previous_.speedKmh ||
+             state.speedLimitKmh != previous_.speedLimitKmh) && alertColumnIdle(state);
         const bool changedAlerts = alertsChanged(state, previous_) ||
                                     currentClockMinute != renderedClockMinute_ ||
-                                    laneStateSwapped;
+                                    laneStateSwapped || speedMarginChanged;
         if (changedAlerts) renderRegion(layout::Alerts, state, settings, systemStatus);
         if (guidanceChanged(state, previous_) || tripChanged)
             renderRegion(layout::Guidance, state, settings, systemStatus);
@@ -1900,6 +1944,7 @@ void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const Devi
     const bool hasLanes = (state.laneCount > 0);
 
     if (alertCount == 0) {
+        drawSpeedMargin(canvas, state);
         return;
     }
 
@@ -2158,7 +2203,7 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
             const char *durationUnit = "";
             if (trip.minutes < 60) {
                 std::snprintf(duration, sizeof(duration), "%d", trip.minutes);
-                durationUnit = "ph";
+                durationUnit = "min";
             } else {
                 std::snprintf(duration, sizeof(duration), "%dh%02d", trip.minutes / 60,
                               trip.minutes % 60);
@@ -2173,10 +2218,14 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
             const char *const labels[] = {"ĐÃ ĐI", "THỜI GIAN", "CAO NHẤT", "TRUNG BÌNH"};
             const char *const values[] = {distance, duration, maxSpeed, avgSpeed};
             const char *const units[] = {"km", durationUnit, "km/h", "km/h"};
+            // Distinct, high-contrast colours on black: distance cyan, time white,
+            // max speed amber, average speed green (red is reserved for danger).
+            const uint16_t valueColors[] = {colors::Cyan, colors::White, colors::Amber,
+                                            colors::Green};
             for (int column = 0; column < 4; ++column) {
                 if (column > 0) canvas.fillRect(columnX, 16, 1, 50, colors::Muted);
                 drawTripStat(canvas, columnX, kColumnWidths[column], labels[column], values[column],
-                             units[column]);
+                             units[column], valueColors[column]);
                 columnX += kColumnWidths[column];
             }
         }
