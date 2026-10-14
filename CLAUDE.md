@@ -13,7 +13,7 @@ Firmware ESP32-S3 (ESP-IDF 5.5.x, C++17) nhận dữ liệu dẫn đường Waze
 ## 2. Quy trình làm việc
 
 1. **Thay đổi giao thức, cấu hình hoặc bố cục nhiều file**: nêu ngắn gọn phạm vi file bị ảnh hưởng và rủi ro (protocol, task timing, bộ nhớ DMA, giao diện) **trước khi sửa**. Sửa nhỏ, rõ ràng thì làm thẳng.
-2. **Chỉ build một bản: S3 BLE cho WazeMod** (`waze-hud\build_es3c28p.ps1`). **Không** build CYD và **không** build mock trừ khi người dùng yêu cầu. Kiểm tra bản CYD chỉ khi gộp `upstream` đụng code dùng chung **và** người dùng muốn kiểm tra.
+2. **Mặc định chỉ build một bản: S3 BLE cho WazeMod** (`waze-hud\build_es3c28p.ps1`). **Không** build mock trừ khi người dùng yêu cầu. Bản CYD 2.8" **chỉ build khi người dùng yêu cầu** (cách build ở mục 3). Kiểm tra CYD sau khi gộp `upstream` chỉ khi người dùng muốn.
 3. **Người dùng nạp thử trên board thật rồi mới xác nhận.** Sau mỗi thay đổi: build, đưa đường dẫn file `.bin`, rồi hỏi xác nhận. **Không commit/push/phát hành khi chưa được yêu cầu.** Khi người dùng nói "commit và git push", mới làm.
 4. Chỉ push lên `origin` (`haint14`). **Không bao giờ push lên `quangdo92`.** Trước khi push nhánh/xóa nhánh/ghi đè, nói rõ giả định về repo đích.
 5. Không commit file `.bin` (đã có trên GitHub Releases). Thư mục `waze-hud/dist/` chỉ chứa bản build cục bộ.
@@ -31,6 +31,7 @@ cd waze-hud
 - `dependencies.lock` chỉ lưu **một** target. Bản S3 dùng `dependencies.es3c28p.lock`; script tự hoán đổi rồi khôi phục. Đừng commit `dependencies.lock` đã bị đổi sang `esp32s3`.
 - Cấu hình S3: `sdkconfig.es3c28p.defaults`. File `sdkconfig.es3c28p` sinh ra từ đó (bị gitignore); **xóa nó rồi build lại** để áp dụng giá trị mới trong `.defaults`.
 - Chip `esp32s3`, flash 16 MB, PSRAM octal 8 MB. Cổng Type-C là USB Serial/JTAG (console/log ra đây).
+- **Build bản CYD 2.8" (khi được yêu cầu)**: `idf.py -B build-cyd -D SDKCONFIG=sdkconfig.cyd -D SDKCONFIG_DEFAULTS=sdkconfig.defaults build`, rồi trong thư mục `build-cyd` gộp bằng `python -m esptool --chip esp32 merge_bin -o <ra.bin> --flash_mode dio --flash_size 4MB --flash_freq 40m "@flash_args"` (nạp tại `0x0`, `--chip esp32`). Đặt file ra ở `waze-hud\dist\release_cyd\` (đã gitignore). Bản CYD có LED RGB nháy khi quá tốc độ, không có âm thanh, mặc định đảo màu tắt và xoay bật; `dependencies.lock` giữ target `esp32`.
 - Phát hành bằng `gh release create` (đã cài, đăng nhập `haint14`). Tag dạng `v2.8.15-s3`, file đặt tên `ES3C28P-BLE-<ddmmyy>-b<bản>.bin`, kèm `SHA256.txt`. Tiêu đề có dấu tiếng Việt: tạo bằng tiêu đề ASCII rồi cập nhật qua `gh api` với tệp JSON UTF-8 (PowerShell 5.1 làm hỏng dấu nháy kép/ký tự có dấu trong tham số).
 
 ## 4. Phần cứng ES3C28P (đã kiểm chứng trên board)
@@ -48,11 +49,11 @@ cd waze-hud
 - **GPIO 33–37 là bus PSRAM octal: không cấu hình các chân này.**
 - Chưa dùng: LED RGB WS2812 (GPIO 42), đo pin (GPIO 9, chưa biết tỉ lệ chia áp), cảm ứng, thẻ nhớ, micro.
 
-## 5. Không đưa vào S3: cảm ứng CYD và WiFi OTA của upstream
+## 5. Không dùng cảm ứng CYD và WiFi OTA của upstream (cả S3 lẫn CYD)
 
-B16 của quangdo92 thêm module cảm ứng XPT2046 (GPIO 33/36, trùng chân PSRAM) và WiFi Web OTA (SoftAP mật khẩu cố định, trang tải firmware không xác thực). **Cả hai không dùng trên S3.**
+B16 của quangdo92 thêm module cảm ứng XPT2046 (GPIO 33/36, trùng chân PSRAM trên S3) và WiFi Web OTA (SoftAP mật khẩu cố định, trang tải firmware không xác thực). Module cảm ứng chỉ phục vụ kích hoạt OTA. **Cả hai không dùng trên mọi board của dự án này, kể cả CYD.**
 
-- S3 dùng file rỗng `touch/touch_sensor_stub.cpp` và `ota/wifi_ota_manager_stub.cpp`, chọn trong `main/CMakeLists.txt` theo `IDF_TARGET`.
+- Cả hai board dùng file rỗng `touch/touch_sensor_stub.cpp` và `ota/wifi_ota_manager_stub.cpp`, đặt cố định trong `main/CMakeLists.txt` (không phụ thuộc `IDF_TARGET`). Bỏ OTA làm bản CYD nhỏ đi: còn khoảng 25% trống trong slot 1,8 MB thay vì khoảng 3%.
 - **Giữ nguyên file gốc của upstream** (`touch_sensor.cpp`, `wifi_ota_manager.cpp`) để các lần `git merge upstream/CYD2.8-V2USB` sau không xung đột lại. Chỉ sửa stub khi giao diện lớp thay đổi.
 - Khi gộp upstream: giải xung đột, giữ README bản S3 (`git checkout --ours README.md`), build bản S3, rồi báo người dùng nạp thử.
 - `GEMINI.md` của upstream đã bị xóa khỏi repo này (thay bằng `CLAUDE.md`). Nếu gộp upstream báo xung đột kiểu "deleted by us" với `GEMINI.md`, giữ trạng thái xóa: `git rm GEMINI.md`.

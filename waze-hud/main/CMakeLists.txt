@@ -2,12 +2,13 @@ set(waze_hud_extra_requires "")
 if(IDF_TARGET STREQUAL "esp32s3")
     # ES3C28P speaker path: ES8311 codec over legacy I2C + I2S output.
     list(APPEND waze_hud_extra_requires driver esp_driver_i2s espressif__es8311)
-    # The CYD touch (GPIO33/36) and WiFi OTA modules do not apply to this board.
-    set(waze_hud_board_sources "ota/wifi_ota_manager_stub.cpp" "touch/touch_sensor_stub.cpp")
-else()
-    list(APPEND waze_hud_extra_requires esp_wifi esp_http_server app_update)
-    set(waze_hud_board_sources "ota/wifi_ota_manager.cpp" "touch/touch_sensor.cpp")
 endif()
+# WiFi OTA and its touch/BOOT trigger (upstream B16) are not used on any board of this
+# project: the S3 has no XPT2046 (GPIO33/36 are PSRAM pins) and the OTA page is an
+# unauthenticated upload on a fixed-password SoftAP. Both boards build inert stubs; the
+# upstream files ota/wifi_ota_manager.cpp and touch/touch_sensor.cpp stay in the tree
+# untouched so merges from upstream remain clean.
+set(waze_hud_board_sources "ota/wifi_ota_manager_stub.cpp" "touch/touch_sensor_stub.cpp")
 
 idf_component_register(
     SRCS

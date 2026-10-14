@@ -9,3 +9,8 @@ waze-hud-link-sdk-ai-bundle.md
 /assets/
 /.vscode/
 scratch/
+
+# Local firmware builds and release staging (published on GitHub Releases, not in git)
+waze-hud/dist/release*/
+waze-hud/dist/waze_hud_es3c28p_*.bin
+waze-hud/dist/*waze_hud_es3c28p_factory.bin
