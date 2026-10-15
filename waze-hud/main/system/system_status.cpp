@@ -104,7 +104,13 @@ SystemStatus &SystemStatus::instance() {
 
 esp_err_t SystemStatus::init() {
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
+#if CONFIG_WAZE_HUD_BOARD_ES3C28P
+    // WAZE_HUD_DISPLAY_CYD_28 is always set, so the ADC code below (T-Display/3.5" pins) never
+    // builds. GPIO4 there is the ES3C28P I2S MCLK; the real sense pin (GPIO9) is not calibrated.
+    ESP_LOGI(kTag, "Battery status disabled: ES3C28P battery sense (GPIO9) is not calibrated");
+#else
     ESP_LOGI(kTag, "Battery status disabled: CYD has no battery-voltage sense input");
+#endif
     return ESP_ERR_NOT_SUPPORTED;
 #else
     adc_oneshot_unit_init_cfg_t unitConfig{};

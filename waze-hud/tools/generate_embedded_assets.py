@@ -3,6 +3,11 @@
 
 The generated C++ is checked in so a normal ESP-IDF build does not require
 Python or Pillow. Re-run this script when the source PNG/TTF files change.
+
+The source pack (assets/Waze, alerts, fonts, speedLimit, App) is deliberately
+not in git (/assets/ is ignored; only assets/demo is tracked). It exists only on
+the maintainer's machine, so this script cannot regenerate the assets from a
+fresh clone. Edit generated_assets.cpp only by re-running it with the pack.
 """
 
 from __future__ import annotations

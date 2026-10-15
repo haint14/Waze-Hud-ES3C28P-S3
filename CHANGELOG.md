@@ -1,6 +1,30 @@
-# Nhật Ký Thay Đổi (Changelog) - WazeHUD CYD 2.8"
+# Nhật Ký Thay Đổi (Changelog) - WazeHUD ESP32-S3 2.8" (ES3C28P / ES3N28P)
 
-Dự án WazeHUD tối ưu cho màn hình ESP32-2432S028 (CYD 2.8 inch). Toàn bộ firmware được phát hành dưới định dạng **Factory All-in-One** (đã bao gồm Bootloader, Partition Table và Firmware), nạp duy nhất 1 file tại offset **`0x0`**.
+Firmware được phát hành dưới định dạng **Factory All-in-One** (đã bao gồm Bootloader, Partition Table và Firmware), nạp duy nhất 1 file tại offset **`0x0`**. Các mục `S3` bên dưới là thay đổi riêng của bản ESP32-S3; các mục `Build`/`Beta` còn lại là lịch sử kế thừa từ bản CYD của quangdo92.
+
+> [!NOTE]
+> **Lời cảm ơn & tuyên bố dự án:** bản ESP32-S3 này được phát triển với sự hỗ trợ của **AI (Claude Code, Anthropic)**, trên nền mã nguồn bản CYD của [quangdo92](https://github.com/quangdo92/waze-hud) (B15/B16, theo changelog của họ được phát triển với Google Gemini), vốn dựa trên [WazeHUD của ShindouAris](https://github.com/ShindouAris/WazeHUD) và cộng đồng [WazeMod Vietnam](https://wazemod.io.vn). Xin trân trọng cảm ơn các tác giả. Đây là bản cá nhân hóa phục vụ nghiên cứu, độ chế và sử dụng thực tế trên xe, chia sẻ mã nguồn mở (GPL-3.0) cho cộng đồng cùng sở thích.
+
+---
+
+## [v2.8.16-s3-r2] - 2026-10-14 (ESP32-S3)
+
+Nền B16, bỏ WiFi OTA và cảm ứng của upstream. Firmware vẫn báo số phiên bản nội bộ `2.8.15` (upstream chưa tăng số trong mã B16).
+
+- **Cột phải khi không có cảnh báo**: hiện so sánh tốc độ với giới hạn (`DƯỚI` xanh lá / `BẰNG` vàng / `VƯỢT` đỏ, kèm số km/h chênh lệch). Tính theo giới hạn thật, không cộng ngưỡng quá tốc trong app.
+- **Thẻ "HÀNH TRÌNH" có màu**: quãng đường xanh lơ, thời gian trắng, tốc độ cao nhất cam, tốc độ trung bình xanh lá; đơn vị `min`, `km`, `km/h` căn thẳng hàng với chữ số.
+- **Mặc định xoay màn hình 180° tắt** cho bản S3 (USB bên trái).
+- **WiFi OTA và cảm ứng** thay bằng file stub rỗng trên mọi board: cảm ứng dùng chân trùng PSRAM trên S3, OTA dùng SoftAP mật khẩu cố định và tải firmware không xác thực.
+- Nạp file gộp tại `0x0` đặt lại cài đặt về mặc định.
+
+## [v2.8.15-s3] - 2026-10-13 (ESP32-S3)
+
+Bản đầu tiên cho board LCDWiki ESP32-S3 2.8 inch, nền B15 (HLP Schema Rev 7).
+
+- **Cảnh báo quá tốc độ bằng giọng nói** qua loa (codec ES8311): quá tốc độ liên tục 1,5 giây thì đọc "Bạn đã quá tốc độ", lặp mỗi 4 giây. Thiếu codec thì HUD vẫn chạy.
+- **Ngày/tháng** cạnh giờ ở hàng trên cùng: `dd/mm | hh:mm`.
+- Đảo màu màn hình chỉnh từ app, mặc định bật cho board này.
+- Chưa hỗ trợ: đèn LED RGB (WS2812), đo pin, cảm ứng, thẻ nhớ.
 
 ---
 

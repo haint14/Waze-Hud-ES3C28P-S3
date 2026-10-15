@@ -6,9 +6,9 @@ Hướng dẫn làm việc cho Claude Code trong repo này. Trả lời người
 
 Firmware ESP32-S3 (ESP-IDF 5.5.x, C++17) nhận dữ liệu dẫn đường Waze qua **BLE / HLP/1** từ app WazeMod và vẽ HUD ô tô 320×240 trên màn ILI9341V. Có **cảnh báo quá tốc độ bằng giọng nói** qua loa (codec ES8311).
 
-- Repo: `haint14/waze-hud` (công khai, GPL-3.0). Nhánh duy nhất và mặc định: **`ES3C28P-S3`**.
+- Repo: `haint14/Waze-Hud-ES3C28P-S3` (công khai, GPL-3.0; tên cũ `haint14/waze-hud` vẫn chuyển hướng tới đây). Nhánh duy nhất và mặc định: **`ES3C28P-S3`**.
 - Đây là fork của `quangdo92/waze-hud` (bản CYD). Người dùng **chỉ phát triển bản S3**; bản CYD do quangdo92 duy trì. Remote `upstream` trỏ tới quangdo92.
-- Mã nguồn firmware: `waze-hud/main/`. Asset gốc: `assets/`. Giọng nói gốc: `audio/`.
+- Mã nguồn firmware: `waze-hud/main/`. Asset gốc (`assets/Waze`, `alerts`, `fonts`, `speedLimit`, `App`) chỉ có trên máy tác giả, **không nằm trong git** (`/assets/` bị gitignore, chỉ `assets/demo` được theo dõi), nên không tạo lại `generated_assets.cpp` được từ bản clone mới. Giọng nói gốc: `audio/`.
 
 ## 2. Quy trình làm việc
 

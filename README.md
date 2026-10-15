@@ -15,7 +15,7 @@ HUD ô tô hiển thị dữ liệu dẫn đường Waze qua Bluetooth BLE (giao
 
 ## 📥 Tải firmware
 
-👉 **[GitHub Releases](https://github.com/haint14/waze-hud/releases/latest)**
+👉 **[GitHub Releases](https://github.com/haint14/Waze-Hud-ES3C28P-S3/releases/latest)**
 
 | File | Dùng cho |
 |---|---|
