@@ -952,11 +952,51 @@ uint8_t collectSortedAlerts(const HudState &state, AlertState *outAlerts, uint8_
     return count;
 }
 
+// Right-hand alert column: the primary alert is shown only within 800 m, one follow-up within
+// 1.5 km. Active no-passing zones and alerts without a distance are never filtered out. The bottom
+// strip shows at most one further alert (only within 2 km) next to a route/trip summary, in a fixed
+// two-slot layout, so at most three alerts are visible at once.
+constexpr int kPrimaryAlertMaxM = 800;
+constexpr int kSecondaryAlertMaxM = 1500;
+constexpr int kCardAlertMaxM = 2000;
+constexpr uint8_t kMaxAlertCards = 1;
+
+bool alertWithinRange(const AlertState &alert, int maxDistanceM) {
+    // An active no-passing zone reports the length left inside it, not a distance ahead.
+    return alert.kind == AlertKind::NoPassing || alert.distanceM < 0 || alert.distanceM <= maxDistanceM;
+}
+
+struct AlertSplit {
+    AlertState column[2];  // [0] primary, [1] optional follow-up
+    uint8_t columnCount{0};
+    AlertState cards[kMaxAlertCards];  // next alert for the bottom strip
+    uint8_t cardCount{0};
+};
+
+AlertSplit splitAlerts(const HudState &state) {
+    AlertSplit result;
+    AlertState sorted[8];
+    const uint8_t count = collectSortedAlerts(state, sorted, 8);
+    int primary = -1;
+    int followUp = -1;
+    for (int i = 0; i < count && primary < 0; ++i)
+        if (alertWithinRange(sorted[i], kPrimaryAlertMaxM)) primary = i;
+    if (primary >= 0) {
+        result.column[result.columnCount++] = sorted[primary];
+        for (int i = 0; i < count && followUp < 0; ++i)
+            if (i != primary && alertWithinRange(sorted[i], kSecondaryAlertMaxM)) followUp = i;
+        if (followUp >= 0) result.column[result.columnCount++] = sorted[followUp];
+    }
+    for (int i = 0; i < count; ++i)
+        if (i != primary && i != followUp && result.cardCount < kMaxAlertCards &&
+            alertWithinRange(sorted[i], kCardAlertMaxM))
+            result.cards[result.cardCount++] = sorted[i];
+    return result;
+}
+
 // The free-drive trip card is shown when nothing else uses the bottom strip.
 bool tripCardVisible(const HudState &state) {
     if (state.laneCount > 0) return false;
-    AlertState alerts[8];
-    if (collectSortedAlerts(state, alerts, 8) > 0) return false;
     return !(state.navigationActive &&
              (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F));
 }
@@ -991,8 +1031,7 @@ void drawTripStat(Canvas &canvas, int x, int width, const char *label, const cha
 // No alert ahead: show how far the vehicle is below/above the speed limit in the alert column,
 // e.g. "DƯỚI / GIỚI HẠN / 4 km/h". Green below, yellow at the limit, red above.
 bool alertColumnIdle(const HudState &state) {
-    AlertState alerts[8];
-    return collectSortedAlerts(state, alerts, 8) == 0;
+    return splitAlerts(state).columnCount == 0;
 }
 
 void drawSpeedMargin(Canvas &canvas, const HudState &state) {
@@ -1703,11 +1742,6 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
     const int outerRadius = hasNextStreet ? 48 : 60;
     const int innerRadius = hasNextStreet ? 40 : 50;
 
-    constexpr int badgeW = 38;
-    constexpr int badgeH = 28;
-    constexpr int badgeX = 225 - badgeW - 2; // 185
-    constexpr int badgeY = 130 - badgeH - 2; // 100
-
     // Kiểm tra chế độ ban đêm: Tuân theo Giao diện (Theme) từ cấu hình hoặc giờ tự động
     bool isNight = false;
     if (settings.theme == UiTheme::Night) {
@@ -1743,18 +1777,27 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
     }
 
     // Huy hiệu tốc độ hiện tại (góc dưới bên phải MainCluster)
-    canvas.fillRect(badgeX, badgeY, badgeW, badgeH, colors::Panel);
-    drawCard(canvas, badgeX, badgeY, badgeW, badgeH, colors::Muted);
-
     char speed[16];
     std::snprintf(speed, sizeof(speed), "%d", std::clamp(state.speedKmh, 0, 999));
     const uint16_t speedColor = firmwareOverspeed(state, settings)
         ? (renderedOverspeedPhase_ ? colors::Red : colors::White)
         : foreground(settings);
 
-    const auto &speedFont = (state.speedKmh >= 100) ? assets::kNumberSmall : assets::kNumberMedium;
-    canvas.fontText(badgeX, badgeY + (badgeH - speedFont.lineHeight) / 2,
-                    speed, speedFont, speedColor, badgeW, true);
+    // The badge is sized to the number: the 36 px speed-limit digits drawn at 85% (about 31 px).
+    const auto &speedFont = assets::kNumberSpeedLimit3;
+    constexpr float kBadgeFontScale = 0.85F;
+    constexpr int kBadgePadX = 7;
+    constexpr int kBadgePadY = 3;
+    const int numberWidth = static_cast<int>(std::lround(canvas.fontTextWidth(speed, speedFont) * kBadgeFontScale));
+    const int numberHeight = static_cast<int>(std::lround(speedFont.lineHeight * kBadgeFontScale));
+    const int badgeW = std::max(44, numberWidth + 2 * kBadgePadX);
+    const int badgeH = numberHeight + 2 * kBadgePadY;
+    const int badgeX = 225 - badgeW - 2;
+    const int badgeY = 130 - badgeH - 2;
+    canvas.fillRect(badgeX, badgeY, badgeW, badgeH, colors::Panel);
+    drawCard(canvas, badgeX, badgeY, badgeW, badgeH, colors::Muted);
+    canvas.fontTextScaled(badgeX, badgeY + kBadgePadY, speed, speedFont, speedColor, kBadgeFontScale,
+                          badgeW, true);
 
     // 3. Banner tên đường tiếp theo: Nổi trên đỉnh biển báo với nền đen chữ trắng (chỉ khi có tên đường)
     if (hasNextStreet) {
@@ -1939,97 +1982,50 @@ void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const Devi
         drawTightText(canvas, clockX, 4, clock, assets::kTextMedium, colors::White);
     }
 
-    AlertState allAlerts[8];
-    const uint8_t alertCount = collectSortedAlerts(state, allAlerts, 8);
-    const bool hasLanes = (state.laneCount > 0);
-
-    if (alertCount == 0) {
+    const AlertSplit split = splitAlerts(state);
+    if (split.columnCount == 0) {
         drawSpeedMargin(canvas, state);
         return;
     }
 
-    if (!hasLanes) {
-        // TRẠNG THÁI 1: Không có lane (Chạy tự do hoặc đi đường thẳng không có lane)
-        // Cụm bên phải hiển thị DUY NHẤT 1 cảnh báo ưu tiên cao nhất (VIP),
-        // các cảnh báo tiếp theo đã được đẩy xuống thanh đáy mở rộng.
-        const auto &primary = allAlerts[0];
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
-        constexpr int iconRadius = 20;
-        constexpr int iconY = 48;
-        constexpr int textY = 74;
-#else
-        constexpr int iconRadius = 22;
-        const int iconY = mainY(42);
-        const int textY = mainY(68);
-#endif
-        drawAlertIcon(canvas, 47, iconY, iconRadius, primary, true);
-        char distance[16]; formatDistance(primary.distanceM, distance, sizeof(distance));
-        canvas.fontText(2, textY, distance, assets::kTextMedium,
-                        alertDistanceColor(primary.distanceM, colors::White), 91, true);
+    // Highest-priority alert large; one follow-up alert as a single icon + distance row below.
+    // This column is the same with or without lanes; the bottom strip shows lanes or the other alerts.
+    const AlertState &primary = split.column[0];
+    const bool hasSecondary = split.columnCount > 1;
+    const int iconRadius = hasSecondary ? 16 : 20;
+    const int iconY = hasSecondary ? 42 : 48;
+    const int textY = hasSecondary ? 64 : 74;
+    drawAlertIcon(canvas, 47, iconY, iconRadius, primary, true);
+    char distance[16]; formatDistance(primary.distanceM, distance, sizeof(distance));
+    const auto &distFont = hasSecondary ? assets::kTextSmall : assets::kTextMedium;
+    canvas.fontText(2, textY, distance, distFont,
+                    alertDistanceColor(primary.distanceM, colors::White), 91, true);
 
-        if (primary.kind == AlertKind::TrafficJam) {
-            char trafficDetail[48];
-            std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s",
-                          trafficSeverityLabel(primary.trafficSeverity));
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
-            canvas.fontText(1, 96, trafficDetail, assets::kTextSmall,
-                            trafficSeverityColor(primary.trafficSeverity), 93, true);
-#else
-            canvas.fontText(1, mainY(86), trafficDetail, assets::kTextSmall,
-                            trafficSeverityColor(primary.trafficSeverity), 93, true);
-#endif
-        }
-    } else {
-        // TRẠNG THÁI 2: Đang có lane (Thanh đáy bận hiển thị mũi tên phân làn)
-        // Cụm bên phải hiển thị 2 tầng (trên to, dưới nhỏ) theo thứ tự ưu tiên
-        const auto &primary = allAlerts[0];
-        const bool hasSecondary = (alertCount > 1);
-        const auto &upcoming = hasSecondary ? allAlerts[1] : AlertState{};
-
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
-        const int iconRadius = hasSecondary ? 16 : 20;
-        const int iconY = hasSecondary ? 42 : 48;
-        const int textY = hasSecondary ? 64 : 74;
-#else
-        const int iconRadius = hasSecondary ? 18 : 22;
-        const int iconY = mainY(hasSecondary ? 34 : 42);
-        const int textY = mainY(hasSecondary ? 58 : 68);
-#endif
-        drawAlertIcon(canvas, 47, iconY, iconRadius, primary, true);
-        char distance[16]; formatDistance(primary.distanceM, distance, sizeof(distance));
-        const auto &distFont = hasSecondary ? assets::kTextSmall : assets::kTextMedium;
-        canvas.fontText(2, textY, distance, distFont,
-                        alertDistanceColor(primary.distanceM, colors::White), 91, true);
-
-        if (primary.kind == AlertKind::TrafficJam) {
-            char trafficDetail[48];
-            std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s",
-                          trafficSeverityLabel(primary.trafficSeverity));
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
-            const int labelY = hasSecondary ? 78 : 96;
-            canvas.fontText(1, labelY, trafficDetail, assets::kTextSmall,
-                            trafficSeverityColor(primary.trafficSeverity), 93, true);
-#else
-            const int labelY = hasSecondary ? mainY(74) : mainY(86);
-            canvas.fontText(1, labelY, trafficDetail, assets::kTextSmall,
-                            trafficSeverityColor(primary.trafficSeverity), 93, true);
-#endif
-        }
-
-        if (hasSecondary) {
-#if CONFIG_WAZE_HUD_DISPLAY_CYD_28
-            constexpr int secondaryIconY = 94;
-            constexpr int secondaryTextY = 110;
-#else
-            const int secondaryIconY = mainY(105);
-            const int secondaryTextY = mainY(121);
-#endif
-            drawAlertIcon(canvas, 47, secondaryIconY, 13, upcoming, false);
-            char upcomingDistance[12]; formatDistance(upcoming.distanceM, upcomingDistance, sizeof(upcomingDistance));
-            canvas.fontText(2, secondaryTextY, upcomingDistance, assets::kTextSmall,
-                            alertDistanceColor(upcoming.distanceM, colors::White), 91, true);
-        }
+    if (primary.kind == AlertKind::TrafficJam) {
+        char trafficDetail[48];
+        std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s",
+                      trafficSeverityLabel(primary.trafficSeverity));
+        const int labelY = hasSecondary ? 77 : 96;
+        canvas.fontText(1, labelY, trafficDetail, assets::kTextSmall,
+                        trafficSeverityColor(primary.trafficSeverity), 93, true);
     }
+
+    if (!hasSecondary) return;
+    // Follow-up row: icon on the left, distance on the right, under a thin divider. The divider
+    // sits below the traffic-jam label of the primary alert.
+    constexpr int kDividerY = 96;
+    constexpr int kRowIconX = 22;
+    constexpr int kRowIconY = 114;
+    constexpr int kRowTextX = 40;
+    constexpr int kRowTextWidth = 53;
+    canvas.fillRect(8, kDividerY, canvas.width() - 16, 1, colors::Muted);
+    const AlertState &upcoming = split.column[1];
+    drawAlertIcon(canvas, kRowIconX, kRowIconY, 13, upcoming, false);
+    char upcomingDistance[12]; formatDistance(upcoming.distanceM, upcomingDistance, sizeof(upcomingDistance));
+    const auto &rowFont = canvas.fontTextWidth(upcomingDistance, assets::kTextMedium) <= kRowTextWidth
+        ? assets::kTextMedium : assets::kTextSmall;
+    canvas.fontText(kRowTextX, kRowIconY - rowFont.lineHeight / 2, upcomingDistance, rowFont,
+                    alertDistanceColor(upcoming.distanceM, colors::White), kRowTextWidth, false);
 }
 
 void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
@@ -2089,61 +2085,65 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
             }
         }
     } else {
-        AlertState allAlerts[8];
-        const uint8_t totalAlerts = collectSortedAlerts(state, allAlerts, 8);
-
-        // allAlerts[0] (cảnh báo quan trọng nhất) đã được hiển thị ở Cụm bên phải (vị trí VIP nhìn trước).
-        // Thanh đáy chỉ hiển thị các cảnh báo tiếp theo, tuyệt đối không bị trùng lặp!
-        const AlertState *subsequentAlerts = allAlerts + 1;
-        const uint8_t alertCount = (totalAlerts > 1) ? std::min<uint8_t>(4, totalAlerts - 1) : 0;
+        // The right-hand column already shows the primary alert and one follow-up; the bottom strip
+        // lists one more (none are repeated) in the left slot and a route/trip summary in the right
+        // slot, so the layout does not change when an alert appears or passes.
+        const AlertSplit split = splitAlerts(state);
+        const AlertState *subsequentAlerts = split.cards;
+        const uint8_t alertCount = split.cardCount;
 
         if (alertCount > 0) {
-            if (alertCount == 1) {
-                const auto &alert = subsequentAlerts[0];
-                drawCard(canvas, 10, 8, 300, 66, colors::Muted);
-                drawAlertIcon(canvas, 45, 41, 20, alert, true);
-                canvas.fontText(80, 16, alertKindLabel(alert.kind), assets::kTextMedium, colors::White, 210, false);
+            constexpr int cardW = 146;
+            constexpr int cardH = 68;
+            for (int i = 0; i < alertCount; ++i) {
+                const int cx1 = 10 + i * 154;
+                const auto &alert = subsequentAlerts[i];
+                drawCard(canvas, cx1, 7, cardW, cardH, colors::Muted);
+                drawAlertIcon(canvas, cx1 + 26, 41, 16, alert, i == 0);
+                canvas.fontText(cx1 + 50, 16, alertKindLabel(alert.kind), assets::kTextSmall, colors::White, cardW - 54, false);
                 char distance[16]; formatDistance(alert.distanceM, distance, sizeof(distance));
-                canvas.fontText(80, 42, distance, assets::kTextLarge, alertDistanceColor(alert.distanceM, colors::Cyan), 120, false);
-                if (alert.kind == AlertKind::TrafficJam) {
-                    canvas.fontText(190, 44, trafficSeverityLabel(alert.trafficSeverity), assets::kTextSmall,
-                                    trafficSeverityColor(alert.trafficSeverity), 110, false);
-                }
-            } else if (alertCount == 2) {
-                constexpr int cardW = 146;
-                constexpr int cardH = 68;
-                for (int i = 0; i < 2; ++i) {
-                    const int cx1 = 10 + i * 154;
-                    const auto &alert = subsequentAlerts[i];
-                    drawCard(canvas, cx1, 7, cardW, cardH, colors::Muted);
-                    drawAlertIcon(canvas, cx1 + 26, 41, 16, alert, i == 0);
-                    canvas.fontText(cx1 + 50, 16, alertKindLabel(alert.kind), assets::kTextSmall, colors::White, cardW - 54, false);
-                    char distance[16]; formatDistance(alert.distanceM, distance, sizeof(distance));
-                    canvas.fontText(cx1 + 50, 40, distance, assets::kTextMedium, alertDistanceColor(alert.distanceM, colors::Cyan), cardW - 54, false);
-                }
-            } else if (alertCount == 3) {
-                constexpr int cardW = 98;
-                constexpr int cardH = 68;
-                for (int i = 0; i < 3; ++i) {
-                    const int cx1 = 7 + i * 103;
-                    const auto &alert = subsequentAlerts[i];
-                    drawCard(canvas, cx1, 7, cardW, cardH, colors::Muted);
-                    drawAlertIcon(canvas, cx1 + cardW / 2, 24, 14, alert, i == 0);
-                    char distance[16]; formatDistance(alert.distanceM, distance, sizeof(distance));
-                    canvas.fontText(cx1 + 2, 42, distance, assets::kTextSmall, alertDistanceColor(alert.distanceM, colors::Cyan), cardW - 4, true);
-                    canvas.fontText(cx1 + 2, 56, alertKindLabel(alert.kind), assets::kTextSmall, colors::White, cardW - 4, true);
-                }
-            } else if (alertCount >= 4) {
-                constexpr int cardW = 73;
-                constexpr int cardH = 68;
-                for (int i = 0; i < 4; ++i) {
-                    const int cx1 = 6 + i * 78;
-                    const auto &alert = subsequentAlerts[i];
-                    drawCard(canvas, cx1, 7, cardW, cardH, colors::Muted);
-                    drawAlertIcon(canvas, cx1 + cardW / 2, 24, 13, alert, i == 0);
-                    char distance[16]; formatDistance(alert.distanceM, distance, sizeof(distance));
-                    canvas.fontText(cx1 + 2, 42, distance, assets::kTextSmall, alertDistanceColor(alert.distanceM, colors::Cyan), cardW - 4, true);
-                    canvas.fontText(cx1 + 2, 56, alertKindLabel(alert.kind), assets::kTextSmall, colors::White, cardW - 4, true);
+                canvas.fontText(cx1 + 50, 40, distance, assets::kTextMedium, alertDistanceColor(alert.distanceM, colors::Cyan), cardW - 54, false);
+            }
+            if (alertCount == 1) {
+                // One alert leaves the right slot free: fill it with the route summary (ETA, distance
+                // and time left), or the trip summary when there is no route.
+                const int cx1 = 10 + 154;
+                drawCard(canvas, cx1, 7, cardW, cardH, colors::Muted);
+                const bool haveRoute = state.navigationActive &&
+                    (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F);
+                if (haveRoute) {
+                    if (state.eta[0] != 0) {
+                        canvas.fontText(cx1, 11, "ETA", assets::kTextSmall, colors::Muted, cardW, true);
+                        canvas.fontText(cx1, 24, state.eta.data(), assets::kTextLarge, colors::White, cardW, true);
+                    }
+                    char left[48]{};
+                    char distBuf[16]{};
+                    if (state.remainingKm >= 1.0F)
+                        std::snprintf(distBuf, sizeof(distBuf), "%.1f km", state.remainingKm);
+                    else if (state.remainingMeters > 0)
+                        std::snprintf(distBuf, sizeof(distBuf), "%d m", state.remainingMeters);
+                    char timeBuf[16]{};
+                    if (state.remainingMinutes >= 60)
+                        std::snprintf(timeBuf, sizeof(timeBuf), "%dh %02dp",
+                                      state.remainingMinutes / 60, state.remainingMinutes % 60);
+                    else if (state.remainingMinutes > 0)
+                        std::snprintf(timeBuf, sizeof(timeBuf), "%d ph", state.remainingMinutes);
+                    std::snprintf(left, sizeof(left), "%s%s%s", distBuf,
+                                  (distBuf[0] != 0 && timeBuf[0] != 0) ? "  -  " : "", timeBuf);
+                    canvas.fontText(cx1, 57, left, assets::kTextSmall, colors::White, cardW - 8, true);
+                } else {
+                    const TripDisplay trip = trip_.display();
+                    char distance[32];
+                    if (trip.distanceTenthsKm < 1000)
+                        std::snprintf(distance, sizeof(distance), "%d.%d km", trip.distanceTenthsKm / 10,
+                                      trip.distanceTenthsKm % 10);
+                    else
+                        std::snprintf(distance, sizeof(distance), "%d km", trip.distanceTenthsKm / 10);
+                    char maxSpeed[24];
+                    std::snprintf(maxSpeed, sizeof(maxSpeed), "CAO NHẤT %d km/h", trip.maxKmh);
+                    canvas.fontText(cx1, 11, "HÀNH TRÌNH", assets::kTextSmall, colors::Muted, cardW, true);
+                    canvas.fontText(cx1, 26, distance, assets::kTextLarge, colors::Cyan, cardW, true);
+                    canvas.fontText(cx1, 57, maxSpeed, assets::kTextSmall, colors::Amber, cardW - 8, true);
                 }
             }
         } else if (state.navigationActive && (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F)) {
