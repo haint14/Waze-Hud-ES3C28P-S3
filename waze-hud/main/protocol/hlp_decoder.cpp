@@ -51,6 +51,26 @@ void copyUtf8(const cJSON *root, const char *key, std::array<char, Capacity> &de
     std::memcpy(destination.data(), item->valuestring, count);
 }
 
+// Waze phrases a straight-ahead instruction as "Tiếp tục đi thẳng ..."; "Đi thẳng ..." reads faster on
+// a HUD. The replacement is shorter than every prefix, so it is rewritten in place.
+template <std::size_t Capacity>
+void shortenContinueStraight(std::array<char, Capacity> &text) {
+    static constexpr char kReplacement[] = "Đi thẳng";
+    static constexpr const char *kPrefixes[] = {"Tiếp tục đi thẳng", "tiếp tục đi thẳng",
+                                                "TIẾP TỤC ĐI THẲNG"};
+    for (const char *prefix : kPrefixes) {
+        const std::size_t prefixLength = std::strlen(prefix);
+        if (std::strncmp(text.data(), prefix, prefixLength) != 0) continue;
+        const char next = text[prefixLength];
+        if (next != '\0' && next != ' ') continue;
+        const std::size_t replacementLength = sizeof(kReplacement) - 1;
+        const std::size_t restLength = std::strlen(text.data() + prefixLength);
+        std::memmove(text.data() + replacementLength, text.data() + prefixLength, restLength + 1);
+        std::memcpy(text.data(), kReplacement, replacementLength);
+        return;
+    }
+}
+
 Maneuver maneuverValue(int value) {
     return value >= 0 && value <= 20 ? static_cast<Maneuver>(value) : Maneuver::None;
 }
@@ -229,6 +249,8 @@ bool HlpDecoder::decodeState(const cJSON *root, HudState &state) {
     decoded.roundaboutExit = std::max(0, integerOr(root, "exit", 0));
     copyUtf8(root, "st", decoded.currentStreet);
     copyUtf8(root, "st2", decoded.nextStreet);
+    shortenContinueStraight(decoded.currentStreet);
+    shortenContinueStraight(decoded.nextStreet);
     copyUtf8(root, "eta", decoded.eta);
     decoded.remainingMinutes = std::max(0, integerOr(root, "rmin", 0));
     const int exactRemainingMeters = integerOr(root, "rm", -1);

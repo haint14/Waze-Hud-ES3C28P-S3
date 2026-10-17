@@ -1969,13 +1969,8 @@ void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const Devi
 
         if (primary.kind == AlertKind::TrafficJam) {
             char trafficDetail[48];
-            if (primary.trafficDelayMinutes >= 0)
-                std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s +%d PH",
-                              trafficSeverityLabel(primary.trafficSeverity),
-                              primary.trafficDelayMinutes);
-            else
-                std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s",
-                              trafficSeverityLabel(primary.trafficSeverity));
+            std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s",
+                          trafficSeverityLabel(primary.trafficSeverity));
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
             canvas.fontText(1, 96, trafficDetail, assets::kTextSmall,
                             trafficSeverityColor(primary.trafficSeverity), 93, true);
@@ -2008,13 +2003,8 @@ void HudRenderer::renderAlerts(Canvas &canvas, const HudState &state, const Devi
 
         if (primary.kind == AlertKind::TrafficJam) {
             char trafficDetail[48];
-            if (primary.trafficDelayMinutes >= 0)
-                std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s +%d PH",
-                              trafficSeverityLabel(primary.trafficSeverity),
-                              primary.trafficDelayMinutes);
-            else
-                std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s",
-                              trafficSeverityLabel(primary.trafficSeverity));
+            std::snprintf(trafficDetail, sizeof(trafficDetail), "%.20s",
+                          trafficSeverityLabel(primary.trafficSeverity));
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
             const int labelY = hasSecondary ? 78 : 96;
             canvas.fontText(1, labelY, trafficDetail, assets::kTextSmall,
@@ -2115,11 +2105,9 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
                 canvas.fontText(80, 16, alertKindLabel(alert.kind), assets::kTextMedium, colors::White, 210, false);
                 char distance[16]; formatDistance(alert.distanceM, distance, sizeof(distance));
                 canvas.fontText(80, 42, distance, assets::kTextLarge, alertDistanceColor(alert.distanceM, colors::Cyan), 120, false);
-                if (alert.kind == AlertKind::TrafficJam && alert.trafficDelayMinutes >= 0) {
-                    char trafficDetail[48];
-                    std::snprintf(trafficDetail, sizeof(trafficDetail), "+%d PH (%s)",
-                                  alert.trafficDelayMinutes, trafficSeverityLabel(alert.trafficSeverity));
-                    canvas.fontText(190, 44, trafficDetail, assets::kTextSmall, trafficSeverityColor(alert.trafficSeverity), 110, false);
+                if (alert.kind == AlertKind::TrafficJam) {
+                    canvas.fontText(190, 44, trafficSeverityLabel(alert.trafficSeverity), assets::kTextSmall,
+                                    trafficSeverityColor(alert.trafficSeverity), 110, false);
                 }
             } else if (alertCount == 2) {
                 constexpr int cardW = 146;
