@@ -1580,7 +1580,7 @@ void HudRenderer::renderStatus(Canvas &canvas, const Rect &region, const HudStat
 #endif
 
     // Status badge on the right
-    const char *statusText = state.signalStale ? "MẤT TÍN HIỆU" : state.connected ? "ĐÃ KẾT NỐI" : (kIsUsb ? "CHỜ CÁP USB" : "CHỜ BLUETOOTH");
+    const char *statusText = state.signalStale ? "MẤT TÍN HIỆU" : state.connected ? "ĐÃ KẾT NỐI" : (kIsUsb ? "CHỜ CÁP USB" : "CHỜ KẾT NỐI");
     const uint16_t statusColor = state.signalStale ? colors::Amber : state.connected ? colors::Green : (kIsUsb ? colors::Amber : colors::Cyan);
     constexpr int badgeW = 120;
     const int badgeX = layout::Width - badgeW - 8;
