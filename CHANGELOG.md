@@ -7,6 +7,18 @@ Firmware được phát hành dưới định dạng **Factory All-in-One** (đ�
 
 ---
 
+## [v2.8.16-s3-r3] - 2026-10-18 (ESP32-S3)
+
+Vẫn nền B16 (không gộp B17 của quangdo92), firmware báo số phiên bản nội bộ `2.8.15`.
+
+- **Cột cảnh báo bên phải gọn hơn** (thiết kế lấy từ bản T-Display): 1 biển chính (chỉ hiện khi cách dưới 800 m) và 1 hàng biển phụ (icon bên trái, khoảng cách bên phải, dưới 1,5 km). Vùng cấm vượt đang đi trong đó và cảnh báo không có khoảng cách luôn hiện. Không có biển nào trong tầm thì cột hiện thẻ so sánh tốc độ với giới hạn.
+- **Dải đáy cố định hai ô** khi không có làn: ô trái là tối đa 1 thẻ cảnh báo kế tiếp (dưới 2 km), ô phải là thẻ tóm tắt (ETA, quãng đường và thời gian còn lại; hoặc quãng đường đã đi và tốc độ cao nhất khi chạy tự do). Tối đa 3 cảnh báo cùng lúc, bố cục không còn nhảy khi một biển xuất hiện hoặc đi qua.
+- **Ô tốc độ xe lớn hơn:** số 36 px vẽ ở 85% trong khung co giãn theo con số (trước đây số 27 px, số 3 chữ số chỉ 13 px).
+- **Rút gọn chỉ dẫn:** "Tiếp tục đi thẳng ..." thành "Đi thẳng ..." trong tên đường hiện tại và kế tiếp (ý tưởng từ B17).
+- **Nhãn kẹt xe chỉ còn mức độ** (NHẸ, VỪA, NẶNG, ĐỨNG IM, ĐƯỜNG ĐÓNG), bỏ số phút (ý tưởng từ B17).
+- Màn chờ: "CHỜ BLUETOOTH" thành "CHỜ KẾT NỐI".
+- Thêm `tools/host_preview` để xem thử giao diện trên PC (ảnh trong `docs/`).
+
 ## [v2.8.16-s3-r2] - 2026-10-14 (ESP32-S3)
 
 Nền B16, bỏ WiFi OTA và cảm ứng của upstream. Firmware vẫn báo số phiên bản nội bộ `2.8.15` (upstream chưa tăng số trong mã B16).
