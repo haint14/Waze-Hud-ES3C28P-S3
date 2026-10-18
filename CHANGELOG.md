@@ -7,6 +7,14 @@ Firmware được phát hành dưới định dạng **Factory All-in-One** (đ�
 
 ---
 
+## [v2.8.16-s3-r4] - 2026-10-18 (ESP32-S3)
+
+Vẫn nền B16 (không gộp B17 của quangdo92), firmware báo số phiên bản nội bộ `2.8.15`.
+
+- **Lane đường ở ô trái dải đáy:** khi dẫn đường có dữ liệu làn, ô trái dải đáy hiện lane, ô phải vẫn là thẻ tóm tắt (ETA, quãng đường và thời gian còn lại), nên không còn mất dải đáy. Từ 1 đến 5 lane dùng lane lớn (có thanh xanh dưới lane được chọn), từ 6 đến 12 lane dùng lane gọn. Lane được ưu tiên hơn thẻ cảnh báo thứ ba. Cách hiển thị lane là một tuỳ chọn build (lane chiếm dải đáy, lane thu nhỏ ở góc, lane ở ô trái dải đáy).
+- **Thẻ hành trình tự hiện khi dẫn đường:** 10 giây mỗi 5 phút, thay cho thẻ tóm tắt ETA (thẻ 4 cột khi dải đáy rảnh, bản gọn ở ô phải khi ô trái đã có lane hoặc cảnh báo).
+- **Ngày khi chạy tự do:** `dd/mm` cỡ lớn màu vàng, năm xuống dòng dưới màu xanh lá, căn giữa cột trái.
+
 ## [v2.8.16-s3-r3] - 2026-10-18 (ESP32-S3)
 
 Vẫn nền B16 (không gộp B17 của quangdo92), firmware báo số phiên bản nội bộ `2.8.15`.
