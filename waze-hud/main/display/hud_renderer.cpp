@@ -34,11 +34,57 @@ uint16_t foreground(const DeviceSettings &settings) {
 template <typename Left, typename Right>
 bool sameText(const Left &left, const Right &right) { return std::strcmp(left.data(), right.data()) == 0; }
 
+// Lane guidance layout (Kconfig "Lane guidance layout"):
+//  - strip (default): large lanes replace the whole bottom strip;
+//  - corner: miniature lanes in the top-left corner of the cluster, bottom strip unchanged;
+//  - card: lanes take the left slot of the bottom strip (alerts give way), the right slot keeps
+//    the route/trip summary.
+#if CONFIG_WAZE_HUD_LANES_CORNER
+constexpr bool kMiniLanes = true;
+#else
+constexpr bool kMiniLanes = false;
+#endif
+#if CONFIG_WAZE_HUD_LANES_CARD
+constexpr bool kLaneCard = true;
+#else
+constexpr bool kLaneCard = false;
+#endif
+constexpr int kLaneBlockWidth = 88;
+constexpr int kLaneBlockHeight = 31;
+constexpr int kLaneColumnWidth = 85;
+constexpr int kMaxVisibleLanes = 12;
+
+// While navigating, the trip summary (distance, time, max and average speed) replaces the ETA
+// summary for 10 seconds at the end of every 5 minutes.
+constexpr uint64_t kTripPeekPeriodMs = 300000;
+constexpr uint64_t kTripPeekDurationMs = 10000;
+
+bool lanesShown(const HudState &state) {
+    return kMiniLanes && state.navigationActive && state.maneuver != Maneuver::None &&
+           state.laneCount > 0;
+}
+
+// Lanes that replace the bottom strip.
+bool bottomLanesShown(const HudState &state) {
+    return !kMiniLanes && !kLaneCard && state.laneCount > 0;
+}
+
+// While the lane block is shown the next-street banner starts to its right.
+int nextStreetTextX(const HudState &state) { return lanesShown(state) ? 90 : 5; }
+int nextStreetAvailableWidth(const HudState &state) { return lanesShown(state) ? 130 : 215; }
+
+bool sameLanes(const HudState &a, const HudState &b) {
+    for (uint8_t index = 0; index < a.laneCount && index < b.laneCount; ++index)
+        if (!(a.lanes[index] == b.lanes[index])) return false;
+    return true;
+}
+
 bool maneuverChanged(const HudState &a, const HudState &b) {
     return a.maneuver != b.maneuver || a.secondManeuver != b.secondManeuver ||
            a.maneuverDistanceM != b.maneuverDistanceM ||
            a.roundaboutExit != b.roundaboutExit ||
-           !sameText(a.nextStreet, b.nextStreet);
+           !sameText(a.nextStreet, b.nextStreet) ||
+           (kMiniLanes && (a.laneCount != b.laneCount || !sameLanes(a, b)));
 }
 
 bool isRoundaboutManeuver(Maneuver maneuver) {
@@ -995,8 +1041,9 @@ AlertSplit splitAlerts(const HudState &state) {
 }
 
 // The free-drive trip card is shown when nothing else uses the bottom strip.
-bool tripCardVisible(const HudState &state) {
-    if (state.laneCount > 0) return false;
+bool tripCardVisible(const HudState &state, bool peek) {
+    if (bottomLanesShown(state)) return false;
+    if (peek) return true;
     return !(state.navigationActive &&
              (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F));
 }
@@ -1057,6 +1104,116 @@ void drawSpeedMargin(Canvas &canvas, const HudState &state) {
                     kNumberY + digitBaseline(assets::kTextLarge) - digitBaseline(assets::kTextSmall),
                     "km/h", assets::kTextSmall, colors::Muted, -1, false);
 }
+[[maybe_unused]] void laneArrowHead(Canvas &canvas, int x, int y, int dx, int dy, uint16_t color,
+                                     int thickness, int size = 2) {
+    if (std::abs(dx) >= std::abs(dy)) {
+        const int sign = dx >= 0 ? 1 : -1;
+        canvas.line(x,y,x-sign*size,y-size,color,thickness);
+        canvas.line(x,y,x-sign*size,y+size,color,thickness);
+    } else {
+        const int sign = dy >= 0 ? 1 : -1;
+        canvas.line(x,y,x-size,y-sign*size,color,thickness);
+        canvas.line(x,y,x+size,y-sign*size,color,thickness);
+    }
+}
+
+// Compact lane: stem plus one branch per allowed direction. "k" scales the vertical geometry and the
+// strokes (1 in the corner block, 2 in the bottom slot) and "y0" is the top of the lane.
+[[maybe_unused]] void drawLane(Canvas &canvas, int x, int branchWidth, const LaneState &lane,
+                               uint16_t fg, int k = 1, int y0 = 0) {
+    const bool recommendedLane = lane.selectedMask != 0;
+    canvas.line(x, y0 + 29 * k, x, y0 + 16 * k, recommendedLane ? fg : colors::Muted,
+                recommendedLane ? k + 1 : k);
+    for (int bit = 0; bit < 8; ++bit) {
+        const uint8_t flag = static_cast<uint8_t>(1U << bit);
+        if ((lane.directionMask & flag) == 0) continue;
+        const bool selected = (lane.selectedMask & flag) != 0;
+        const uint16_t color = selected ? fg : colors::Muted;
+        const int thickness = selected ? k + 1 : k;
+        int endX = x;
+        int endY = 5;
+        switch (bit) {
+            case 1: endX = x - std::max(1, branchWidth / 2); endY = 6; break;
+            case 2: endX = x - branchWidth; endY = 9; break;
+            case 3: endX = x - branchWidth; endY = 13; break;
+            case 4: endX = x + std::max(1, branchWidth / 2); endY = 6; break;
+            case 5: endX = x + branchWidth; endY = 9; break;
+            case 6: endX = x + branchWidth; endY = 13; break;
+            case 7:
+                endX = x - branchWidth;
+                canvas.line(x, y0 + 16 * k, endX, y0 + 10 * k, color, thickness);
+                canvas.line(endX, y0 + 10 * k, endX, y0 + 15 * k, color, thickness);
+                laneArrowHead(canvas, endX, y0 + 15 * k, 0, 1, color, thickness, 2 * k);
+                continue;
+            default: break;
+        }
+        canvas.line(x, y0 + 16 * k, endX, y0 + endY * k, color, thickness);
+        laneArrowHead(canvas, endX, y0 + endY * k, endX - x, endY - 16, color, thickness, 2 * k);
+    }
+}
+
+// Lanes in the left slot of the bottom strip (about 146 x 68). Up to five lanes use the large lane
+// graphics of the full-width strip; more switch to the compact lanes drawn at twice the corner size.
+[[maybe_unused]] void drawLaneSlot(Canvas &canvas, const HudState &state, int x0, int width) {
+    constexpr int kLargeMax = 5;
+    constexpr int kCompactMax = 12;
+    const int total = std::min<int>(state.laneCount, static_cast<int>(kMaxLanes));
+    if (total <= 0) return;
+    const int visible = std::min(total, total <= kLargeMax ? kLargeMax : kCompactMax);
+    int start = 0;
+    if (total > visible) {
+        int first = -1;
+        int last = -1;
+        for (int index = 0; index < total; ++index) {
+            if (state.lanes[index].selectedMask == 0) continue;
+            if (first < 0) first = index;
+            last = index;
+        }
+        if (first >= 0) start = std::clamp((first + last) / 2 - visible / 2, 0, total - visible);
+    }
+    if (start > 0) drawArrowHeadDir(canvas, x0 + 2, 41, 2, colors::Amber, 5);
+    if (start + visible < total) drawArrowHeadDir(canvas, x0 + width - 2, 41, 3, colors::Amber, 5);
+    const int margin = (start > 0 || start + visible < total) ? 8 : 0;
+    const int spacing = (width - 2 * margin) / visible;
+    const int firstX = x0 + (width - spacing * visible) / 2 + spacing / 2;
+    for (int index = 0; index < visible; ++index) {
+        const int lx = firstX + index * spacing;
+        const LaneState &lane = state.lanes[start + index];
+        if (visible <= kLargeMax) {
+            drawGuidanceLane(canvas, lx, spacing, lane, colors::White);
+            if (index > 0) {
+                const int dividerX = lx - spacing / 2;
+                for (int dy = 16; dy < 68; dy += 10) canvas.line(dividerX, dy, dividerX, dy + 5, colors::Muted, 1);
+            }
+        } else {
+            drawLane(canvas, lx, std::max(2, spacing / 2 - 1), lane, colors::White, 2, 12);
+        }
+    }
+}
+
+[[maybe_unused]] void drawMiniLanes(Canvas &canvas, const HudState &state, uint16_t fg) {
+    const int total = std::min<int>(state.laneCount, static_cast<int>(kMaxLanes));
+    const int visible = std::min(total, kMaxVisibleLanes);
+    if (visible <= 0) return;
+    int start = 0;
+    if (total > visible) {
+        int first = -1;
+        int last = -1;
+        for (int index = 0; index < total; ++index) {
+            if (state.lanes[index].selectedMask == 0) continue;
+            if (first < 0) first = index;
+            last = index;
+        }
+        if (first >= 0) start = std::clamp((first + last) / 2 - visible / 2, 0, total - visible);
+    }
+    const int spacing = std::max(6, 80 / visible);
+    const int totalWidth = spacing * visible;
+    const int firstX = (kLaneColumnWidth - totalWidth) / 2 + spacing / 2;
+    const int branchWidth = std::max(2, spacing / 2 - 1);
+    for (int index = 0; index < visible; ++index)
+        drawLane(canvas, firstX + index * spacing, branchWidth, state.lanes[start + index], fg);
+}
+
 }  // namespace
 
 esp_err_t HudRenderer::init() {
@@ -1074,7 +1231,7 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
                          const SystemStatusSnapshot &systemStatus) {
     trip_.update(state);
     const TripDisplay tripNow = trip_.display();
-    const bool tripChanged = !(tripNow == renderedTrip_) && tripCardVisible(state);
+    const bool tripChanged = !(tripNow == renderedTrip_) && tripCardVisible(state, tripPeek_);
     const int64_t currentClockMillis = localClockMillis(state);
     const int64_t currentClockSecond = currentClockMillis == INT64_MIN
         ? INT64_MIN : currentClockMillis / 1000LL;
@@ -1097,6 +1254,10 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
     const bool shouldMarquee = state.connected && state.hasProducerState &&
                                streetWidth > availableStreetWidth;
     const uint64_t nowMs = static_cast<uint64_t>(esp_timer_get_time() / 1000);
+    const bool tripPeekNow = state.navigationActive && state.connected && state.hasProducerState &&
+                             nowMs % kTripPeekPeriodMs >= kTripPeekPeriodMs - kTripPeekDurationMs;
+    const bool tripPeekChanged = tripPeekNow != tripPeek_;
+    tripPeek_ = tripPeekNow;
     if (!shouldMarquee) {
         marqueeActive_ = false;
         marqueeOffset_ = 0;
@@ -1125,7 +1286,7 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
     const bool marqueeFrameChanged = marqueeActive_ && marqueeOffset_ != marqueeRenderedOffset_;
 #if CONFIG_WAZE_HUD_DISPLAY_CYD_28
     const bool nextStreetChanged = firstFrame_ || !sameText(state.nextStreet, previous_.nextStreet);
-    constexpr int availableNextStreetWidth = 215;
+    const int availableNextStreetWidth = nextStreetAvailableWidth(state);
     const int nextStreetWidth = state.nextStreet[0] != 0
         ? metrics.fontTextWidth(state.nextStreet.data(), assets::kTextMedium) : 0;
     const bool shouldNextStreetMarquee = state.connected && state.hasProducerState &&
@@ -1136,13 +1297,15 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
         nextStreetMarqueeOffset_ = 0;
     } else {
         if (!nextStreetMarqueeActive_ || nextStreetChanged ||
-            nextStreetWidth != nextStreetMarqueeTextWidth_) {
+            nextStreetWidth != nextStreetMarqueeTextWidth_ ||
+            availableNextStreetWidth != nextStreetMarqueeAvailableWidth_) {
             nextStreetMarqueeEpochMs_ = nowMs;
             nextStreetMarqueeOffset_ = 0;
             nextStreetMarqueeRenderedOffset_ = -1;
         }
         nextStreetMarqueeActive_ = true;
         nextStreetMarqueeTextWidth_ = nextStreetWidth;
+        nextStreetMarqueeAvailableWidth_ = availableNextStreetWidth;
         constexpr uint64_t kNsStartHoldMs = 1000;
         constexpr uint64_t kNsEndHoldMs = 500;
         constexpr uint64_t kNsMsPerPixel = 28;
@@ -1277,7 +1440,7 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
         if (speedClusterChanged)
             renderRegion(layout::SpeedCluster, state, settings, systemStatus);
 #endif
-        const bool laneStateSwapped = (state.laneCount > 0) != (previous_.laneCount > 0);
+        const bool laneStateSwapped = bottomLanesShown(state) != bottomLanesShown(previous_);
         const bool speedMarginChanged =
             (state.speedKmh != previous_.speedKmh ||
              state.speedLimitKmh != previous_.speedLimitKmh) && alertColumnIdle(state);
@@ -1285,7 +1448,7 @@ void HudRenderer::render(const HudState &state, const DeviceSettings &settings,
                                     currentClockMinute != renderedClockMinute_ ||
                                     laneStateSwapped || speedMarginChanged;
         if (changedAlerts) renderRegion(layout::Alerts, state, settings, systemStatus);
-        if (guidanceChanged(state, previous_) || tripChanged)
+        if (guidanceChanged(state, previous_) || tripChanged || tripPeekChanged)
             renderRegion(layout::Guidance, state, settings, systemStatus);
         if (streetChanged || laneStateSwapped || marqueeFrameChanged) {
             renderRegion(layout::Street, state, settings, systemStatus);
@@ -1705,17 +1868,20 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
             const int year = std::clamp(tmVal.tm_year + 1900, 2000, 2099);
             const int month = std::clamp(tmVal.tm_mon + 1, 1, 12);
             const int mday = std::clamp(tmVal.tm_mday, 1, 31);
-            char dateStr[32];
-            std::snprintf(dateStr, sizeof(dateStr), "%02d/%02d/%04d", mday, month, year);
+            char dayMonthStr[8];
+            char yearStr[8];
+            std::snprintf(dayMonthStr, sizeof(dayMonthStr), "%02d/%02d", mday, month);
+            std::snprintf(yearStr, sizeof(yearStr), "%04d", year);
 
             canvas.fontText(0, 12, dayStr, assets::kTextSmall, colors::Cyan, 84, true);
             canvas.fontText(0, 36, timeStr, assets::kTextLarge, colors::White, 84, true);
-            canvas.line(18, 74, 66, 74, colors::Muted, 1);
-            // Full date in metallic gold: bright face over a darker 1 px shadow. The medium
-            // font is 100 px wide; with 1 px tighter spacing it is 90 px, which still clears
-            // the speed sign here (the sign's left edge is x >= 99 at this height).
-            drawTightText(canvas, 1, 89, dateStr, assets::kTextMedium, colors::GoldShadow);
-            drawTightText(canvas, 0, 88, dateStr, assets::kTextMedium, colors::Gold);
+            canvas.line(18, 70, 66, 70, colors::Muted, 1);
+            // Date on two centred lines: dd/mm in metallic gold, the year in green, each a bright face over
+            // a darker 1 px shadow. Two lines fit the 84 px column without cramping or clipping.
+            canvas.fontText(1, 75, dayMonthStr, assets::kTextLarge, colors::GoldShadow, 84, true);
+            canvas.fontText(0, 74, dayMonthStr, assets::kTextLarge, colors::Gold, 84, true);
+            canvas.fontText(1, 103, yearStr, assets::kTextMedium, colors::GreenShadow, 84, true);
+            canvas.fontText(0, 102, yearStr, assets::kTextMedium, colors::Green, 84, true);
         } else {
             canvas.fontText(4, 16, "CHẠY", assets::kTextSmall, colors::Muted, 77, true);
             canvas.fontText(4, 34, "TỰ DO", assets::kTextMedium, colors::Green, 77, true);
@@ -1804,8 +1970,14 @@ void HudRenderer::renderMainCluster(Canvas &canvas, const HudState &state,
         constexpr int bannerH = 26;
         canvas.fillRect(0, 0, canvas.width(), bannerH, colors::Panel);
         const int offset = nextStreetMarqueeActive_ ? nextStreetMarqueeOffset_ : 0;
-        canvas.fontText(5 - offset, 2, state.nextStreet.data(),
+        canvas.fontText(nextStreetTextX(state) - offset, 2, state.nextStreet.data(),
                         assets::kTextMedium, colors::White, -1, false);
+    }
+
+    // 4. Miniature lane guidance in the top-left corner (only with CONFIG_WAZE_HUD_LANES_CORNER).
+    if (lanesShown(state)) {
+        canvas.fillRect(0, 0, kLaneBlockWidth, kLaneBlockHeight, colors::Panel);
+        drawMiniLanes(canvas, state, colors::White);
     }
 }
 #endif
@@ -2033,7 +2205,7 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
     canvas.clear(colors::Panel);
     const uint16_t fg = colors::White;
 
-    const uint8_t totalLanes = std::min<uint8_t>(state.laneCount, kMaxLanes);
+    const uint8_t totalLanes = bottomLanesShown(state) ? std::min<uint8_t>(state.laneCount, kMaxLanes) : 0;
     if (totalLanes > 0) {
         constexpr uint8_t kMaxVisibleLanes = 8;
         uint8_t startIdx = 0;
@@ -2092,10 +2264,14 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
         const AlertState *subsequentAlerts = split.cards;
         const uint8_t alertCount = split.cardCount;
 
-        if (alertCount > 0) {
+        // Lanes take the left slot (card layout) and push the alert card out; the right slot is
+        // always the summary.
+        const bool laneSlot = kLaneCard && state.navigationActive && state.laneCount > 0;
+        if (laneSlot || alertCount > 0) {
             constexpr int cardW = 146;
             constexpr int cardH = 68;
-            for (int i = 0; i < alertCount; ++i) {
+            if (laneSlot) drawLaneSlot(canvas, state, 10, cardW);
+            else for (int i = 0; i < alertCount; ++i) {
                 const int cx1 = 10 + i * 154;
                 const auto &alert = subsequentAlerts[i];
                 drawCard(canvas, cx1, 7, cardW, cardH, colors::Muted);
@@ -2104,12 +2280,12 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
                 char distance[16]; formatDistance(alert.distanceM, distance, sizeof(distance));
                 canvas.fontText(cx1 + 50, 40, distance, assets::kTextMedium, alertDistanceColor(alert.distanceM, colors::Cyan), cardW - 54, false);
             }
-            if (alertCount == 1) {
-                // One alert leaves the right slot free: fill it with the route summary (ETA, distance
+            if (laneSlot || alertCount == 1) {
+                // One alert (or the lanes) leaves the right slot free: fill it with the route summary (ETA, distance
                 // and time left), or the trip summary when there is no route.
                 const int cx1 = 10 + 154;
                 drawCard(canvas, cx1, 7, cardW, cardH, colors::Muted);
-                const bool haveRoute = state.navigationActive &&
+                const bool haveRoute = state.navigationActive && !tripPeek_ &&
                     (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F);
                 if (haveRoute) {
                     if (state.eta[0] != 0) {
@@ -2146,7 +2322,8 @@ void HudRenderer::renderGuidance(Canvas &canvas, const HudState &state,
                     canvas.fontText(cx1, 57, maxSpeed, assets::kTextSmall, colors::Amber, cardW - 8, true);
                 }
             }
-        } else if (state.navigationActive && (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F)) {
+        } else if (state.navigationActive && !tripPeek_ &&
+                   (state.eta[0] != 0 || state.remainingMinutes > 0 || state.remainingKm > 0.0F)) {
             constexpr int etaWidth = 85;
             canvas.fillRect(etaWidth - 1, 6, 1, layout::GuidanceHeight - 12, colors::Muted);
 
@@ -2231,7 +2408,7 @@ void HudRenderer::renderStreet(Canvas &canvas, const HudState &state, const Devi
         std::snprintf(streetBuf, sizeof(streetBuf), "%s", displayStreet(state));
     }
 
-    if (state.laneCount > 0 && state.eta[0] != 0) {
+    if (bottomLanesShown(state) && state.eta[0] != 0) {
         char etaBuf[16];
         std::snprintf(etaBuf, sizeof(etaBuf), "ETA %s", state.eta.data());
         const int etaW = canvas.fontTextWidth(etaBuf, assets::kTextSmall) + 6;

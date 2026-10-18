@@ -18,12 +18,12 @@ constexpr bool kDefaultInvertColor = true;
 constexpr bool kDefaultInvertColor = false;
 #endif
 
-// Factory default for the 180-degree rotation. The CYD default is on (USB on the right).
-// The ES3C28P is mounted with USB on the left, which is the unrotated orientation.
-#ifdef CONFIG_WAZE_HUD_BOARD_ES3C28P
-constexpr bool kDefaultRotateDisplay = false;
-#else
+// Factory default for the 180-degree rotation (CONFIG_WAZE_HUD_DEFAULT_ROTATE_DISPLAY). Upstream's
+// CYD default is on (USB on the right); the ES3C28P is mounted USB-left, the unrotated orientation.
+#ifdef CONFIG_WAZE_HUD_DEFAULT_ROTATE_DISPLAY
 constexpr bool kDefaultRotateDisplay = true;
+#else
+constexpr bool kDefaultRotateDisplay = false;
 #endif
 
 struct DeviceSettings {

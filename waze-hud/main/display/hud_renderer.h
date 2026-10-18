@@ -57,11 +57,13 @@ private:
     int nextStreetMarqueeOffset_{0};
     int nextStreetMarqueeRenderedOffset_{-1};
     int nextStreetMarqueeTextWidth_{0};
+    int nextStreetMarqueeAvailableWidth_{0};
     bool nextStreetMarqueeActive_{false};
     bool overspeedActive_{false};
     bool renderedOverspeedPhase_{false};
     bool clockActive_{false};
     bool firstFrame_{true};
+    bool tripPeek_{false};
     TripStats trip_{};
     TripDisplay renderedTrip_{};
     uint8_t currentAppliedBrightness_{0};

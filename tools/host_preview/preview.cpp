@@ -73,8 +73,17 @@ int main() {
     { auto s = base(); alerts(s, {{AlertKind::SpeedCamera, 300, 0}, {AlertKind::Police, 850, 0}}); shot("n02_two_alerts", s); }
     { auto s = base(); alerts(s, {{AlertKind::SpeedCamera, 300, 0}, {AlertKind::Police, 850, 0}, {AlertKind::Hazard, 1400, 0}, {AlertKind::Railway, 1800, 0}, {AlertKind::Flood, 2600, 0}}); shot("n03_one_card", s); }
     { auto s = base(); alerts(s, {{AlertKind::SpeedCamera, 1200, 0}}); shot("n04_far_only", s); }
+    g_nowUs = 295000000;  // 295 s: inside the 10 s trip peek that ends every 5 minutes
+    { auto s = base(); shot("p00_peek_plain", s); }
+    { auto s = base(); alerts(s, {{AlertKind::SpeedCamera, 300, 0}, {AlertKind::Police, 850, 0}, {AlertKind::Hazard, 1400, 0}}); shot("p01_peek_alert_card", s); }
+    { auto s = base(); lanes(s); shot("p02_peek_lanes", s); }
+    g_nowUs = 1000000;
     { auto s = base(); s.navigationActive = false; s.maneuver = Maneuver::None; s.nextStreet.fill(0); s.eta.fill(0); s.remainingMinutes = 0; s.remainingKm = 0; s.remainingMeters = 0; alerts(s, {{AlertKind::Police, 1100, 0}}); shot("n04b_free_one_card", s); }
     { auto s = base(); lanes(s); alerts(s, {{AlertKind::SpeedCamera, 300, 0}, {AlertKind::Police, 850, 0}}); shot("n05_lanes_alerts", s); }
+    { auto s = base(); s.laneCount = 5; for (uint8_t i = 0; i < 5; ++i) { s.lanes[i].directionMask = i == 0 ? 0x05 : i == 4 ? 0x30 : 0x01; s.lanes[i].selectedMask = i == 2 ? 0x01 : 0; } shot("n05c_five_lanes", s); }
+    { auto s = base(); s.laneCount = 8; for (uint8_t i = 0; i < 8; ++i) { s.lanes[i].directionMask = i < 2 ? 0x04 : i > 5 ? 0x20 : 0x01; s.lanes[i].selectedMask = i == 3 || i == 4 ? 0x01 : 0; } alerts(s, {{AlertKind::SpeedCamera, 300, 0}, {AlertKind::Police, 850, 0}, {AlertKind::Hazard, 1400, 0}}); shot("n05d_eight_lanes_alerts", s); }
+    { auto s = base(); lanes(s); shot("n05e_three_lanes_plain", s); }
+    { auto s = base(); s.laneCount = 6; for (uint8_t i = 0; i < 6; ++i) { s.lanes[i].directionMask = i < 2 ? 0x04 : i > 3 ? 0x20 : 0x01; s.lanes[i].selectedMask = i == 2 || i == 3 ? 0x01 : 0; } shot("n05b_six_lanes", s); }
     { auto s = base(); alerts(s, {{AlertKind::TrafficJam, 420, 0, 4, 18}, {AlertKind::TrafficJam, 1350, 0, 2, 5}}); shot("n06_traffic", s); }
     { auto s = base(); s.noPassingZone = true; s.noPassingRemainingM = 1250; alerts(s, {{AlertKind::SpeedCamera, 600, 0}}); shot("n07_nopassing", s); }
     { auto s = base(); s.speedKmh = 86; s.speedLimitKmh = 60; s.overSpeed = true; s.maneuver = Maneuver::SharpLeft; s.maneuverDistanceM = 35; shot("n08_overspeed", s); }

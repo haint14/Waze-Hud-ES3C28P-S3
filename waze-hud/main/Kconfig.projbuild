@@ -17,6 +17,32 @@ config WAZE_HUD_BOARD_ES3C28P
         320x240 landscape layout and software rotation are reused.
         Leave disabled for the classic ESP32-2432S028 CYD.
 
+config WAZE_HUD_DEFAULT_ROTATE_DISPLAY
+    bool "Rotate the display 180 degrees by default"
+    default n if WAZE_HUD_BOARD_ES3C28P
+    default y
+    help
+        Factory default of the "rotate 180" setting (it can still be changed from the app or the
+        BOOT button). Enabled for the CYD upstream default (USB on the right).
+
+choice WAZE_HUD_LANE_LAYOUT
+    prompt "Lane guidance layout"
+    depends on WAZE_HUD_DISPLAY_CYD_28
+    default WAZE_HUD_LANES_STRIP
+    help
+        Where the lane arrows are drawn while navigating with lane data.
+
+config WAZE_HUD_LANES_STRIP
+    bool "Large lanes replace the bottom strip"
+
+config WAZE_HUD_LANES_CORNER
+    bool "Miniature lanes in the top-left corner (bottom strip stays)"
+
+config WAZE_HUD_LANES_CARD
+    bool "Lanes in the left slot of the bottom strip (summary stays on the right)"
+
+endchoice
+
 config WAZE_HUD_LCD_INVERT_COLOR
     bool "Enable LCD color inversion (INVON)"
     default y if WAZE_HUD_BOARD_ES3C28P
